@@ -621,26 +621,54 @@ server.tool(
 
       await logEvent(PROJECT_ID, "orchestrator", `Task enqueued: ${task?.title}`, undefined, "action");
 
-      // Trigger sub-agent worker via internal API (fire-and-forget)
+      // SYNCHRONOUS: Trigger sub-agent worker and WAIT for result
+      // Captain MUST see the real outcome to report to user
       const baseUrl = process.env.NEXTAUTH_URL || process.env.BASE_URL || "http://localhost:3000";
       const internalSecret = process.env.INTERNAL_SECRET || "taskflow-internal-2026";
-      fetch(`${baseUrl}/api/internal/trigger-worker`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-internal-secret": internalSecret,
-        },
-        body: JSON.stringify({ queueItemId: queueItem.id }),
-      }).catch((err) => {
-        console.error("Failed to trigger worker:", err.message);
-      });
 
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify({
-          success: true, queueItemId: queueItem.id,
-          message: `Task "${task?.title || "task"}" added to agent queue and worker triggered (priority: ${args.priority || 0})`,
-        }) }],
-      };
+      try {
+        const workerRes = await fetch(`${baseUrl}/api/internal/trigger-worker`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-secret": internalSecret,
+          },
+          body: JSON.stringify({ queueItemId: queueItem.id, waitForResult: true }),
+        });
+
+        const workerData = await workerRes.json();
+
+        if (workerData.success) {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({
+              success: true,
+              queueItemId: queueItem.id,
+              status: "COMPLETED",
+              message: `SUB-AGENT COMPLETED — Task: "${task?.title}"\n\n--- AGENT REPORT ---\n${workerData.summary}\n--- END REPORT ---\n\nYou MUST present this report to the user. Evaluate the work quality and decide: approve_reject_task with APPROVAL or REJECTION.`,
+            }) }],
+          };
+        } else {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({
+              success: false,
+              queueItemId: queueItem.id,
+              status: workerData.status || "FAILED",
+              message: `SUB-AGENT FAILED — Task: "${task?.title}"\nError: ${workerData.error}\n\nTell the user what went wrong. Suggest a fix.`,
+            }) }],
+          };
+        }
+      } catch (fetchErr: any) {
+        // Worker trigger failed — report but don't crash
+        console.error("Worker call failed:", fetchErr.message);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({
+            success: true,
+            queueItemId: queueItem.id,
+            status: "QUEUED",
+            message: `Task "${task?.title}" queued but worker response timed out. Sub-agent may still be running in background. Check task status later.`,
+          }) }],
+        };
+      }
     } catch (e: any) {
       return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
     }
