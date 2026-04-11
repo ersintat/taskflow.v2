@@ -129,7 +129,7 @@ export function ActorsClient() {
             <Card key={actor.id} className="border border-border hover:border-primary/30 hover:shadow-md transition-all cursor-pointer" onClick={() => router.push(`/actors/${actor.id}`)}>
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
-                  <ActorAvatar name={actor.name} type={actor.type} avatarUrl={actor.avatarUrl} size="lg" />
+                  <ActorAvatar name={actor.name} type={actor.type} avatarUrl={actor.avatarUrl} size="xl" />
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-base truncate">{actor.name}</h3>
                     {actor.persona ? (

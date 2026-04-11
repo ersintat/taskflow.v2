@@ -7,13 +7,13 @@ interface ActorAvatarProps {
   name: string;
   type: string;
   avatarUrl?: string | null;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
 
-const sizeMap = { sm: 'h-6 w-6 text-[10px]', md: 'h-8 w-8 text-xs', lg: 'h-10 w-10 text-sm' };
-const imgSize = { sm: 24, md: 32, lg: 40 };
-const iconSize = { sm: 12, md: 14, lg: 18 };
+const sizeMap: Record<string, string> = { sm: 'h-6 w-6 text-[10px]', md: 'h-8 w-8 text-xs', lg: 'h-10 w-10 text-sm', xl: 'h-16 w-16 text-lg' };
+const imgSize: Record<string, number> = { sm: 24, md: 32, lg: 40, xl: 64 };
+const iconSize: Record<string, number> = { sm: 12, md: 14, lg: 18, xl: 28 };
 
 export function ActorAvatar({ name, type, avatarUrl, size = 'md', className }: ActorAvatarProps) {
   const s = sizeMap[size] ?? sizeMap.md;
