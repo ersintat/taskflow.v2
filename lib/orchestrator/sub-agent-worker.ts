@@ -1,0 +1,234 @@
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import { prisma } from '@/lib/db';
+import { syncTaskCategory } from '@/lib/task-utils';
+import { trackTokenUsage } from '@/lib/token-tracking';
+import { buildSubAgentPrompt } from './sub-agent-prompt';
+import path from 'path';
+
+// ─── Concurrency Control ───
+const MAX_CONCURRENT = 3;
+let activeWorkers = 0;
+
+// ─── System Log Helper ───
+async function logEvent(projectId: string | null, title: string, details?: string, level = 'info') {
+  try {
+    await prisma.systemLog.create({
+      data: { projectId, category: 'sub_agent', title, details, level },
+    });
+  } catch { /* non-blocking */ }
+}
+
+/**
+ * Entry point. Called from executeEnqueueTask (synchronous — captain waits for result).
+ */
+export async function triggerSubAgentWorker(queueItemId: string): Promise<void> {
+  if (activeWorkers >= MAX_CONCURRENT) {
+    console.log(`Sub-agent worker: max concurrency (${MAX_CONCURRENT}) reached, task will wait`);
+    return;
+  }
+
+  activeWorkers++;
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), 10 * 60 * 1000); // 10 min
+
+  try {
+    await runSubAgent(queueItemId);
+  } catch (error: any) {
+    const msg = error.name === 'AbortError' ? 'Sub-agent timed out (10 min)' : error.message;
+    console.error(`Sub-agent failed for ${queueItemId}:`, msg);
+
+    try {
+      const item = await prisma.agentQueue.findUnique({ where: { id: queueItemId } });
+      if (item) {
+        await prisma.agentQueue.update({
+          where: { id: queueItemId },
+          data: { status: 'FAILED', result: JSON.stringify({ error: msg }), completedAt: new Date() },
+        });
+        await prisma.task.update({ where: { id: item.taskId }, data: { status: 'blocked' } });
+        await syncTaskCategory(item.taskId, 'blocked');
+        await logEvent(item.taskId, `Sub-agent failed: ${msg}`, undefined, 'error');
+      }
+    } catch { /* best-effort */ }
+  } finally {
+    clearTimeout(timeout);
+    activeWorkers--;
+    processNextInQueue().catch(() => {});
+  }
+}
+
+async function processNextInQueue(): Promise<void> {
+  if (activeWorkers >= MAX_CONCURRENT) return;
+  const next = await prisma.agentQueue.findFirst({
+    where: { status: 'WAITING' },
+    orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+  });
+  if (next) triggerSubAgentWorker(next.id).catch(() => {});
+}
+
+/**
+ * Core sub-agent execution via Claude Agent SDK (subscription).
+ */
+async function runSubAgent(queueItemId: string): Promise<void> {
+  // Load queue item
+  const queueItem = await prisma.agentQueue.findUnique({
+    where: { id: queueItemId },
+    include: {
+      task: {
+        include: {
+          assignments: {
+            include: { actor: { include: { capabilities: true } } },
+          },
+        },
+      },
+    },
+  });
+
+  if (!queueItem || queueItem.status !== 'WAITING') return;
+
+  const agentAssignment = queueItem.task.assignments.find((a: any) => a.actor.type === 'AGENT');
+  if (!agentAssignment) {
+    throw new Error(`No agent assigned to task "${queueItem.task.title}"`);
+  }
+
+  const actor = agentAssignment.actor;
+  const projectId = queueItem.task.projectId;
+  const workspacePath = path.join(process.cwd(), 'workspaces', projectId);
+  const mcpServerScript = path.join(process.cwd(), 'mcp-server', 'index.ts');
+  const dbUrl = process.env.DATABASE_URL || 'file:./dev.db';
+
+  await logEvent(projectId, `Sub-agent "${actor.name}" starting: ${queueItem.task.title}`);
+
+  // Update queue to RUNNING
+  await prisma.agentQueue.update({
+    where: { id: queueItemId },
+    data: { status: 'RUNNING', claimedBy: actor.id, claimedAt: new Date() },
+  });
+  await prisma.task.update({ where: { id: queueItem.taskId }, data: { status: 'in_progress' } });
+  await syncTaskCategory(queueItem.taskId, 'in_progress');
+
+  await prisma.taskActivity.create({
+    data: {
+      taskId: queueItem.taskId,
+      actorId: actor.id,
+      eventType: 'claimed',
+      description: `Sub-agent "${actor.name}" started work`,
+    },
+  });
+
+  // Build prompt
+  const systemPrompt = await buildSubAgentPrompt(actor, queueItem.task, projectId, workspacePath);
+  const taskPrompt = `Execute this task now:\n\n**${queueItem.task.title}**\n\n${queueItem.task.description || 'No description.'}\n\nUse your tools. When finished, provide a clear summary.`;
+
+  // Run via Agent SDK (subscription — no API key needed)
+  console.log(`Sub-agent "${actor.name}" executing "${queueItem.task.title}" via Agent SDK (sonnet)`);
+
+  let fullContent = '';
+  let totalTokens = 0;
+
+  try {
+    const agentStream = query({
+      prompt: taskPrompt,
+      options: {
+        agent: 'sub-agent',
+        agents: {
+          'sub-agent': {
+            description: `Sub-agent: ${actor.name}`,
+            prompt: systemPrompt,
+            model: 'sonnet',
+            maxTurns: 30,
+          },
+        },
+        cwd: workspacePath,
+        mcpServers: {
+          'taskflow-tools': {
+            command: 'npx',
+            args: ['tsx', mcpServerScript],
+            env: { DATABASE_URL: dbUrl, PROJECT_ID: projectId },
+          },
+        },
+        allowedTools: ['mcp__taskflow-tools__*', 'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
+        permissionMode: 'acceptEdits',
+      },
+    });
+
+    for await (const event of agentStream) {
+      if (event.type === 'assistant') {
+        for (const block of event.message.content) {
+          if (block.type === 'text') {
+            fullContent += block.text;
+          }
+        }
+      } else if (event.type === 'result') {
+        if (event.subtype === 'success' && event.result) {
+          if (!fullContent) fullContent = event.result;
+        } else if (event.subtype !== 'success') {
+          const errors = ('errors' in event && event.errors?.length) ? event.errors.join(', ') : 'Unknown error';
+          throw new Error(`Agent SDK error: ${errors}`);
+        }
+
+        // Track usage
+        if ('usage' in event && event.usage) {
+          const u = event.usage as any;
+          totalTokens = (u.input_tokens || 0) + (u.output_tokens || 0);
+          await trackTokenUsage({
+            projectId,
+            actorId: actor.id,
+            model: 'claude-sonnet-subscription',
+            source: 'sub_agent',
+            promptTokens: u.input_tokens || 0,
+            completionTokens: u.output_tokens || 0,
+            totalTokens,
+            taskId: queueItem.taskId,
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch (err: any) {
+    // If agent SDK itself fails, wrap the error
+    throw new Error(`Sub-agent "${actor.name}" execution failed: ${err.message}`);
+  }
+
+  // Report completion
+  const summary = fullContent || 'Task completed (no summary)';
+  const stepCount = summary.length > 0 ? 1 : 0;
+
+  await prisma.agentQueue.update({
+    where: { id: queueItemId },
+    data: {
+      status: 'COMPLETED',
+      result: JSON.stringify({ summary: summary.substring(0, 5000), tokens: totalTokens }),
+      completedAt: new Date(),
+    },
+  });
+
+  await prisma.task.update({ where: { id: queueItem.taskId }, data: { status: 'pending_review' } });
+  await syncTaskCategory(queueItem.taskId, 'pending_review');
+
+  await prisma.taskActivity.create({
+    data: {
+      taskId: queueItem.taskId,
+      actorId: actor.id,
+      eventType: 'status_changed',
+      description: `Sub-agent "${actor.name}" completed work`,
+      metadata: JSON.stringify({ queueItemId, tokens: totalTokens }),
+    },
+  });
+
+  await logEvent(projectId, `Sub-agent "${actor.name}" completed: ${queueItem.task.title}`, summary.substring(0, 500), 'action');
+
+  // Notify project owner
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
+  if (project?.ownerId) {
+    await prisma.notification.create({
+      data: {
+        userId: project.ownerId,
+        title: `${actor.name} görevini tamamladı`,
+        message: `"${queueItem.task.title}" tamamlandı, onay bekliyor.`,
+        type: 'success',
+        link: `/projects/${projectId}`,
+      },
+    }).catch(() => {});
+  }
+
+  console.log(`Sub-agent "${actor.name}" finished "${queueItem.task.title}"`);
+}

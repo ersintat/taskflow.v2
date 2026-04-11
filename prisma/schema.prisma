@@ -1,0 +1,414 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "sqlite"
+    url      = env("DATABASE_URL")
+}
+
+// ───── Auth / Users ─────
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  avatarUrl    String?   @map("avatar_url")
+  role         String    @default("member") // admin | member
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  projects      Project[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+// ───── Projects ─────
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      String   @default("active") // active | archived
+  color       String   @default("#6366f1") // Project icon color
+  ownerId     String   @map("owner_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Project Config
+  claudeWorkDir   String?  @map("claude_work_dir")   // Claude CLI working directory path
+  autoMission     Boolean  @default(false) @map("auto_mission") // Orchestrator can create missions without asking
+  connectedApis   String?  @map("connected_apis") // JSON: {shopify: {apiKey: "..."}, ...}
+
+  owner      User             @relation(fields: [ownerId], references: [id])
+  categories TaskCategory[]
+  tasks      Task[]
+  knowledge  KnowledgeBase[]
+  contexts   ProjectContext[]
+  missions   AgentMission[]
+  chatMessages OrchestratorChat[]
+  systemLogs SystemLog[]
+  tokenUsage TokenUsage[]
+  schedules  Schedule[]
+
+  @@map("projects")
+}
+
+// ───── Task Categories ─────
+model TaskCategory {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  name      String
+  color     String   @default("#6366f1")
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@map("task_categories")
+}
+
+// ───── Tasks ─────
+model Task {
+  id          String    @id @default(cuid())
+  projectId   String    @map("project_id")
+  categoryId  String?   @map("category_id")
+  title       String
+  description String?
+  status      String    @default("todo") // todo | in_progress | done | blocked | pending_review | pending_acceptance | cancelled
+  priority    String    @default("medium") // urgent | high | medium | low
+  taskType    String    @default("action") @map("task_type") // action | report | audit | monitor
+  riskLevel   String?   @map("risk_level") // LOW | MEDIUM | HIGH | CRITICAL
+  platform    String?   // gmc | google_ads | meta | ga4 | gsc | klaviyo | shopify
+  dueDate     DateTime? @map("due_date")
+  createdBy   String?   @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category    TaskCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  assignments TaskAssignment[]
+  activities  TaskActivity[]
+  comments    Comment[]
+  decisions   Decision[]
+  subtasks    Subtask[]
+  agentQueue  AgentQueue[]
+
+  @@index([projectId])
+  @@index([status])
+  @@map("tasks")
+}
+
+// ───── Actors ─────
+model Actor {
+  id         String   @id @default(cuid())
+  name       String
+  type       String   @default("HUMAN") // HUMAN | AGENT | SYSTEM
+  email      String?
+  avatarUrl  String?  @map("avatar_url")
+  model      String?  // AI model ID (e.g., "gemini-2.0-flash", "claude-sonnet-4-20250514")
+  trustLevel String   @default("SUPERVISED") @map("trust_level") // FULL | SUPERVISED | RESTRICTED
+  persona    String?  // Role/persona description: "Sen kıdemli bir SEO uzmanısın"
+  behavior   String?  // Behavioral guidelines: "önce analiz et, sonra cevap ver"
+  rules      String?  // Constraints/policies: "kaynak göstermeden kesin konuşma"
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  capabilities ActorCapability[]
+  assignments  TaskAssignment[]  @relation("ActorAssignments")
+  assignedBy   TaskAssignment[]  @relation("AssignedByActor")
+  activities   TaskActivity[]
+  comments     Comment[]
+  decisions    Decision[]
+  agentClaims  AgentQueue[]
+  schedules    Schedule[]
+
+  @@map("actors")
+}
+
+// ───── Actor Capabilities ─────
+model ActorCapability {
+  id               String   @id @default(cuid())
+  actorId          String   @map("actor_id")
+  capabilityName   String   @map("capability_name")
+  proficiencyLevel Int      @default(3) @map("proficiency_level") // 1-5
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  actor Actor @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@map("actor_capabilities")
+}
+
+// ───── Task Assignments ─────
+model TaskAssignment {
+  id         String   @id @default(cuid())
+  taskId     String   @map("task_id")
+  actorId    String   @map("actor_id")
+  role       String   @default("ASSIGNEE") // ASSIGNEE | REVIEWER
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  assignedBy String?  @map("assigned_by")
+
+  task          Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor         Actor  @relation("ActorAssignments", fields: [actorId], references: [id], onDelete: Cascade)
+  assignedByActor Actor? @relation("AssignedByActor", fields: [assignedBy], references: [id], onDelete: SetNull)
+
+  @@unique([taskId, actorId, role])
+  @@map("task_assignments")
+}
+
+// ───── Task Activities ─────
+model TaskActivity {
+  id          String   @id @default(cuid())
+  taskId      String   @map("task_id")
+  actorId     String?  @map("actor_id")
+  eventType   String   @map("event_type")
+  description String
+  metadata    String?  // JSON string
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  task  Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor Actor? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+  @@index([createdAt])
+  @@map("task_activities")
+}
+
+// ───── Comments ─────
+model Comment {
+  id        String   @id @default(cuid())
+  taskId    String   @map("task_id")
+  actorId   String   @map("actor_id")
+  content   String
+  parentId  String?  @map("parent_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  task   Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor  Actor     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  parent Comment?  @relation("CommentThread", fields: [parentId], references: [id])
+  replies Comment[] @relation("CommentThread")
+
+  @@map("comments")
+}
+
+// ───── Decisions ─────
+model Decision {
+  id           String   @id @default(cuid())
+  taskId       String   @map("task_id")
+  actorId      String   @map("actor_id")
+  decisionType String   @map("decision_type") // APPROVAL | REJECTION | REDIRECT | DESIGN_CHOICE | TECHNICAL_DECISION
+  title        String
+  decision     String
+  rationale    String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor Actor @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@map("decisions")
+}
+
+// ───── Subtasks ─────
+model Subtask {
+  id        String   @id @default(cuid())
+  taskId    String   @map("task_id")
+  title     String
+  completed Boolean  @default(false)
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("subtasks")
+}
+
+// ───── Agent Queue ─────
+model AgentQueue {
+  id          String    @id @default(cuid())
+  taskId      String    @map("task_id")
+  priority    Int       @default(0)
+  status      String    @default("WAITING") // WAITING | CLAIMED | RUNNING | COMPLETED | FAILED
+  claimedBy   String?   @map("claimed_by")
+  claimedAt   DateTime? @map("claimed_at")
+  completedAt DateTime? @map("completed_at")
+  budgetCents Int?      @map("budget_cents")
+  result      String?   // JSON string
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  task    Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  claimer Actor? @relation(fields: [claimedBy], references: [id], onDelete: SetNull)
+
+  @@map("agent_queue")
+}
+
+// ───── Knowledge Base ─────
+model KnowledgeBase {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  title     String
+  content   String
+  type      String   // LESSON_LEARNED | DECISION_RATIONALE | TECHNICAL_NOTE | PROCESS_NOTE | REFERENCE | FAQ
+  tags      String   @default("[]") // JSON array stored as string
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("knowledge_base")
+}
+
+// ───── Project Context ─────
+model ProjectContext {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  key       String
+  value     String
+  version   Int      @default(1)
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, key, version])
+  @@map("project_context")
+}
+
+// ───── Notifications ─────
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  title     String
+  message   String
+  type      String   @default("info") // info | success | warning | error
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+// ───── Agent Missions (Bridge → Claude CLI) ─────
+model AgentMission {
+  id            String    @id @default(cuid())
+  projectId     String    @map("project_id")
+  title         String
+  prompt        String    // Detailed prompt/instructions
+  targetService String    @map("target_service") // shopify | gmc | google_ads | meta | ga4 | gsc | klaviyo | general
+  missionType   String    @map("mission_type") @default("data_pull") // data_pull | analysis | action | report
+  status        String    @default("pending") // pending | claimed | running | completed | failed | cancelled
+  priority      Int       @default(0)
+  result        String?   // JSON string from Claude CLI
+  logs          String?   // intermediate outputs
+  errorMessage  String?   @map("error_message")
+  claimedAt     DateTime? @map("claimed_at")
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([status, priority])
+  @@index([projectId])
+  @@map("agent_missions")
+}
+
+// ───── Bridge Tokens ─────
+model BridgeToken {
+  id          String    @id @default(cuid())
+  name        String    // e.g. "Serkan's MacBook"
+  tokenHash   String    @unique @map("token_hash")
+  lastSeenAt  DateTime? @map("last_seen_at")
+  isActive    Boolean   @default(true) @map("is_active")
+  machineInfo String?   @map("machine_info")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("bridge_tokens")
+}
+
+// ───── Orchestrator Chat ─────
+model OrchestratorChat {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  role      String   // user | assistant | system | tool_result
+  content   String
+  metadata  String?  // JSON - tool calls, mission refs, etc.
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@map("orchestrator_chat")
+}
+
+// ───── System Logs ─────
+model SystemLog {
+  id        String   @id @default(cuid())
+  projectId String?  @map("project_id")
+  level     String   @default("info") // info | warning | error | action
+  category  String   // orchestrator | mission | bridge | system | api
+  title     String
+  details   String?  // Log details text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([category])
+  @@index([createdAt])
+  @@map("system_logs")
+}
+
+// ───── AI Token Usage ─────
+model TokenUsage {
+  id              String   @id @default(cuid())
+  projectId       String?  @map("project_id")
+  actorId         String?  @map("actor_id")     // Which agent used the tokens
+  model           String                         // e.g. "gemini-3.1-pro-preview", "gemini-2.5-flash"
+  source          String                         // "captain" | "sub_agent"
+  promptTokens    Int      @default(0) @map("prompt_tokens")
+  completionTokens Int     @default(0) @map("completion_tokens")
+  totalTokens     Int      @default(0) @map("total_tokens")
+  estimatedCostUsd Float?  @map("estimated_cost_usd") // Calculated based on model pricing
+  taskId          String?  @map("task_id")       // If sub-agent, which task triggered this
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([source])
+  @@index([createdAt])
+  @@map("token_usage")
+}
+
+// ───── Scheduled Tasks (Cron Jobs) ─────
+model Schedule {
+  id          String    @id @default(cuid())
+  projectId   String    @map("project_id")
+  name        String
+  description String?
+  cron        String                         // Cron expression: "0 9 * * *"
+  timezone    String    @default("Europe/Istanbul")
+  action      String                         // "create_task" | "enqueue_task" | "run_agent"
+  payload     String                         // JSON: task template or config
+  agentId     String?   @map("agent_id")
+  isActive    Boolean   @default(true) @map("is_active")
+  lastRunAt   DateTime? @map("last_run_at")
+  nextRunAt   DateTime? @map("next_run_at")
+  runCount    Int       @default(0) @map("run_count")
+  lastError   String?   @map("last_error")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agent   Actor?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([isActive, nextRunAt])
+  @@map("schedules")
+}

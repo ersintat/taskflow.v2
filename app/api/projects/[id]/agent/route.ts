@@ -1,0 +1,257 @@
+export const dynamic = 'force-dynamic';
+export const maxDuration = 600;
+
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/db';
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import { buildOrchestratorPrompt } from '@/lib/orchestrator/system-prompt';
+import { trackTokenUsage } from '@/lib/token-tracking';
+import path from 'path';
+import fs from 'fs';
+
+function getMcpServerPath(): string {
+  return path.join(process.cwd(), 'mcp-server', 'index.ts');
+}
+
+// ─── Background Agent Runner ───
+// Runs Agent SDK query() independently of browser connection.
+// SSE stream pipes events while open; if browser disconnects, agent keeps running.
+
+interface AgentEvent {
+  type: 'text' | 'tool' | 'tool_progress' | 'error' | 'done';
+  content?: string;
+  tool?: string;
+  args?: any;
+  elapsed?: number;
+}
+
+type EventListener = (event: AgentEvent) => void;
+
+async function runAgentInBackground(
+  projectId: string,
+  userMessage: string,
+): Promise<{ subscribe: (listener: EventListener) => () => void }> {
+  const listeners = new Set<EventListener>();
+  let isComplete = false;
+  const bufferedEvents: AgentEvent[] = [];
+
+  const emit = (event: AgentEvent) => {
+    if (listeners.size > 0) {
+      for (const listener of listeners) {
+        try { listener(event); } catch { /* listener error — ignore */ }
+      }
+    }
+    // Buffer events for late subscribers (not used now, but safe)
+    if (!isComplete) bufferedEvents.push(event);
+  };
+
+  const subscribe = (listener: EventListener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+
+  // Fire-and-forget: agent runs regardless of subscribers
+  (async () => {
+    const workspacePath = path.join(process.cwd(), 'workspaces', projectId);
+    if (!fs.existsSync(workspacePath)) {
+      fs.mkdirSync(workspacePath, { recursive: true });
+    }
+
+    const systemPrompt = await buildOrchestratorPrompt(projectId, workspacePath);
+
+    const recentChat = await prisma.orchestratorChat.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    const chatHistory = recentChat
+      .reverse()
+      .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+      .map((m: any) => `${m.role === 'user' ? 'Human' : 'Assistant'}: ${m.content}`)
+      .join('\n\n');
+
+    const fullPrompt = chatHistory
+      ? `Previous conversation:\n${chatHistory}\n\nHuman: ${userMessage}`
+      : userMessage;
+
+    const dbUrl = process.env.DATABASE_URL || 'file:./dev.db';
+    const mcpServerScript = getMcpServerPath();
+
+    let fullContent = '';
+
+    try {
+      const agentStream = query({
+        prompt: fullPrompt,
+        options: {
+          agent: 'captain',
+          agents: {
+            captain: {
+              description: 'Orchestrator Captain — PSNS Taskflow',
+              prompt: systemPrompt,
+              model: 'opus',
+            },
+          },
+          mcpServers: {
+            'taskflow-tools': {
+              command: 'npx',
+              args: ['tsx', mcpServerScript],
+              env: {
+                DATABASE_URL: dbUrl,
+                PROJECT_ID: projectId,
+              },
+            },
+          },
+          allowedTools: ['mcp__taskflow-tools__*', 'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebFetch'],
+          maxTurns: 50,
+          permissionMode: 'acceptEdits',
+        },
+      });
+
+      for await (const event of agentStream) {
+        if (event.type === 'assistant') {
+          for (const block of event.message.content) {
+            if (block.type === 'text') {
+              fullContent += block.text;
+              emit({ type: 'text', content: block.text });
+            } else if (block.type === 'tool_use') {
+              const toolName = (block.name || '').replace('mcp__taskflow-tools__', '');
+              emit({ type: 'tool', tool: toolName, args: block.input });
+            }
+          }
+        } else if (event.type === 'stream_event') {
+          const se = event.event;
+          if (se.type === 'content_block_delta' && se.delta.type === 'text_delta') {
+            fullContent += se.delta.text;
+            emit({ type: 'text', content: se.delta.text });
+          }
+        } else if (event.type === 'tool_progress') {
+          const toolName = (event.tool_name || '').replace('mcp__taskflow-tools__', '');
+          emit({ type: 'tool_progress', tool: toolName, elapsed: event.elapsed_time_seconds });
+        } else if (event.type === 'result') {
+          if (event.subtype === 'success' && event.result && !fullContent) {
+            fullContent = event.result;
+            emit({ type: 'text', content: event.result });
+          } else if (event.subtype !== 'success') {
+            const errorMsg = ('errors' in event && event.errors?.length) ? event.errors.join(', ') : 'An error occurred';
+            fullContent += `\n\u26a0\ufe0f ${errorMsg}`;
+            emit({ type: 'error', content: errorMsg });
+          }
+
+          // Track usage from result
+          if ('usage' in event && event.usage) {
+            const u = event.usage as any;
+            await trackTokenUsage({
+              projectId,
+              model: 'claude-subscription',
+              source: 'captain',
+              promptTokens: u.input_tokens || u.inputTokens || 0,
+              completionTokens: u.output_tokens || u.outputTokens || 0,
+              totalTokens: (u.input_tokens || 0) + (u.output_tokens || 0),
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Agent SDK error:', error);
+      const errMsg = `Error: ${error.message || 'Unknown error'}`;
+      fullContent += errMsg;
+      emit({ type: 'error', content: errMsg });
+
+      // Save error as assistant message
+      await prisma.orchestratorChat.create({
+        data: { projectId, role: 'assistant', content: errMsg },
+      }).catch(() => {});
+    }
+
+    // Save assistant response (always — regardless of browser connection)
+    if (fullContent.trim()) {
+      await prisma.orchestratorChat.create({
+        data: { projectId, role: 'assistant', content: fullContent },
+      }).catch(() => {});
+    }
+
+    // Retention: clean old messages
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    await prisma.orchestratorChat.deleteMany({
+      where: { projectId, createdAt: { lt: sevenDaysAgo } },
+    }).catch(() => {});
+
+    isComplete = true;
+    emit({ type: 'done' });
+    listeners.clear();
+  })().catch((err) => {
+    console.error('Background agent fatal error:', err);
+    isComplete = true;
+    emit({ type: 'error', content: `Fatal: ${err.message}` });
+    emit({ type: 'done' });
+    listeners.clear();
+  });
+
+  return { subscribe };
+}
+
+// POST /api/projects/:id/agent — Captain chat via Claude Agent SDK (subscription)
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const body = await req.json();
+  const { message } = body;
+
+  // Support both useChat format (messages array) and direct message format
+  let userMessage = message;
+  if (!userMessage && body.messages?.length) {
+    const lastUser = [...body.messages].reverse().find((m: any) => m.role === 'user');
+    userMessage = lastUser?.content || lastUser?.parts?.find((p: any) => p.type === 'text')?.text || '';
+  }
+
+  if (!userMessage?.trim()) {
+    return NextResponse.json({ error: 'Message required' }, { status: 400 });
+  }
+
+  const projectId = params.id;
+
+  // Save user message
+  await prisma.orchestratorChat.create({
+    data: { projectId, role: 'user', content: userMessage.trim() },
+  }).catch(() => {});
+
+  // Start agent in background (runs independently of this SSE stream)
+  const { subscribe } = await runAgentInBackground(projectId, userMessage.trim());
+
+  // SSE stream: pipes events to browser while connection is open
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      const unsubscribe = subscribe((event: AgentEvent) => {
+        try {
+          if (event.type === 'done') {
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+            return;
+          }
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
+          );
+        } catch {
+          // Controller closed (browser disconnected) — agent keeps running
+          unsubscribe();
+        }
+      });
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
+}

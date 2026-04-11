@@ -1,0 +1,9 @@
+{
+  "name": "taskflow-mcp",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.1.1",
+    "@prisma/client": "^6.0.0",
+    "zod": "^3.23.8"
+  }
+}
