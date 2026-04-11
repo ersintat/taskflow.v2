@@ -191,7 +191,11 @@ export async function POST(
 
         for await (const event of agentStream) {
           if (event.type === 'assistant') {
-            // Complete assistant message — extract text and tool_use blocks
+            // Add paragraph break between assistant turns
+            if (fullContent.length > 0 && !fullContent.endsWith('\n\n')) {
+              fullContent += '\n\n';
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: '\n\n' })}\n\n`));
+            }
             const message = event.message;
             for (const block of message.content) {
               if (block.type === 'text') {

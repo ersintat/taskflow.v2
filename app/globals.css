@@ -196,11 +196,19 @@
 }
 .chat-markdown h2 { font-size: 16px; }
 .chat-markdown h3 { font-size: 14px; }
-.chat-markdown ul, .chat-markdown ol {
+.chat-markdown ul {
   padding-left: 20px;
   margin: 4px 0;
+  list-style-type: disc;
+}
+.chat-markdown ol {
+  padding-left: 20px;
+  margin: 4px 0;
+  list-style-type: decimal;
 }
 .chat-markdown li { margin: 2px 0; }
+.chat-markdown ul ul { list-style-type: circle; }
+.chat-markdown ul ul ul { list-style-type: square; }
 .chat-markdown p { margin: 4px 0; }
 .chat-markdown strong { color: #e2e8f0; }
 .chat-markdown a { color: #818cf8; text-decoration: underline; }

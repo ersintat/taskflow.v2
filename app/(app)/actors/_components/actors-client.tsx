@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Users, Bot, Cpu, User, Star } from 'lucide-react';
+import { Plus, Users, Bot, Cpu, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -124,31 +124,27 @@ export function ActorsClient() {
           </Button>
         </EmptyState>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {actors.map((actor: any) => (
-            <Card key={actor.id} className="border border-border hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push(`/actors/${actor.id}`)}>
-              <CardContent className="p-5">
-                <div className="flex items-start gap-3 mb-3">
+            <Card key={actor.id} className="border border-border hover:border-primary/30 hover:shadow-md transition-all cursor-pointer" onClick={() => router.push(`/actors/${actor.id}`)}>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
                   <ActorAvatar name={actor.name} type={actor.type} avatarUrl={actor.avatarUrl} size="lg" />
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-sm truncate">{actor.name}</h3>
-                    {actor.email && <p className="text-xs text-muted-foreground truncate">{actor.email}</p>}
-                    <div className="flex items-center gap-1.5 mt-1.5">
+                    <h3 className="font-semibold text-base truncate">{actor.name}</h3>
+                    {actor.persona ? (
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{actor.persona}</p>
+                    ) : actor.email ? (
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{actor.email}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground/50 italic mt-0.5">No role defined</p>
+                    )}
+                    <div className="flex items-center gap-1.5 mt-2">
                       {typeBadge(actor.type)}
                       {trustBadge(actor.trustLevel)}
                     </div>
                   </div>
                 </div>
-                {(actor.capabilities ?? []).length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {(actor.capabilities ?? []).map((c: any) => (
-                      <span key={c.id} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs">
-                        <Star className="h-2.5 w-2.5 text-amber-500" />
-                        {c.capabilityName}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </CardContent>
             </Card>
           ))}

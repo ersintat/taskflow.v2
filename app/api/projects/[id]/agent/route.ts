@@ -112,6 +112,11 @@ async function runAgentInBackground(
 
       for await (const event of agentStream) {
         if (event.type === 'assistant') {
+          // Add paragraph break between assistant turns (after tool calls)
+          if (fullContent.length > 0 && !fullContent.endsWith('\n\n')) {
+            fullContent += '\n\n';
+            emit({ type: 'text', content: '\n\n' });
+          }
           for (const block of event.message.content) {
             if (block.type === 'text') {
               fullContent += block.text;

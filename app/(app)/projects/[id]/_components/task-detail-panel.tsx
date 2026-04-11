@@ -325,7 +325,7 @@ export function TaskDetailPanel({ taskId, onClose, onUpdate }: Props) {
       {['pending_review', 'pending_acceptance'].includes(task.status) && (
         <div className="mx-4 mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-          <span className="text-sm font-medium text-amber-600 dark:text-amber-400">Sub-agent çalışmasını tamamladı — onay bekliyor</span>
+          <span className="text-sm font-medium text-amber-600 dark:text-amber-400">Sub-agent completed — awaiting approval</span>
         </div>
       )}
 
@@ -755,16 +755,16 @@ export function TaskDetailPanel({ taskId, onClose, onUpdate }: Props) {
           {/* Action Buttons for pending_review / pending_acceptance */}
           {['pending_review', 'pending_acceptance'].includes(task.status) && !decidingType && (
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground font-medium">Bu görev onayınızı bekliyor:</p>
+              <p className="text-xs text-muted-foreground font-medium">This task is awaiting your approval:</p>
               <div className="flex gap-2">
                 <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={quickApprove}>
-                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Onayla
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Approve
                 </Button>
                 <Button size="sm" variant="destructive" onClick={() => setDecidingType('REJECTION')}>
-                  <XCircle className="h-3.5 w-3.5 mr-1.5" /> Reddet
+                  <XCircle className="h-3.5 w-3.5 mr-1.5" /> Reject
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setDecidingType('REDIRECT')}>
-                  <ArrowRight className="h-3.5 w-3.5 mr-1.5" /> Yönlendir
+                  <ArrowRight className="h-3.5 w-3.5 mr-1.5" /> Redirect
                 </Button>
               </div>
             </div>
@@ -786,13 +786,13 @@ export function TaskDetailPanel({ taskId, onClose, onUpdate }: Props) {
               </div>
               <div className="space-y-2">
                 <Textarea
-                  placeholder={decidingType === 'REJECTION' ? "Neyi düzeltmeli? Eksik olan ne?" : "Nereye yönlendirilmeli?"}
+                  placeholder={decidingType === 'REJECTION' ? "What needs to be fixed? What's missing?" : "Where should this be redirected?"}
                   value={decisionText}
                   onChange={(e: any) => setDecisionText(e.target.value)}
                   rows={2}
                   className="text-sm"
                 />
-                <Button size="sm" onClick={() => submitDecision(decidingType)}>{decidingType === 'REJECTION' ? 'Reddet' : 'Yönlendir'}</Button>
+                <Button size="sm" onClick={() => submitDecision(decidingType)}>{decidingType === 'REJECTION' ? 'Reject' : 'Redirect'}</Button>
               </div>
             </div>
           )}

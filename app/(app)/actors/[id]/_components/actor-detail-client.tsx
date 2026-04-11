@@ -116,7 +116,7 @@ export function ActorDetailClient() {
   }, [params.id]);
 
   const handleDelete = useCallback(async () => {
-    if (!confirm(`"${actor?.name}" silinecek. Emin misiniz?`)) return;
+    if (!confirm(`"${actor?.name}" will be deleted. Are you sure?`)) return;
     try {
       const res = await fetch(`/api/actors/${params.id}`, { method: 'DELETE' });
       if (!res.ok) { toast.error('Delete failed'); return; }
@@ -140,13 +140,13 @@ export function ActorDetailClient() {
 
   const formatDate = (date: string) => {
     const d = new Date(date);
-    return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   const formatTime = (date: string) => {
     const d = new Date(date);
-    return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }) +
-      ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) +
+      ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
   if (loading) {
@@ -242,9 +242,9 @@ export function ActorDetailClient() {
       {actor.type === 'AGENT' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {([
-            { field: 'persona', label: 'Role / Persona', icon: UserCog, placeholder: 'e.g. "Sen kıdemli bir SEO uzmanısın, 10 yıl tecrüben var"', color: 'text-violet-500' },
-            { field: 'behavior', label: 'Behavior', icon: BookOpen, placeholder: 'e.g. "Önce analiz et, sonra cevap ver. Asla tahmin yürütme."', color: 'text-blue-500' },
-            { field: 'rules', label: 'Rules & Constraints', icon: ShieldAlert, placeholder: 'e.g. "Kaynak göstermeden kesin konuşma. Kişisel veri isteme."', color: 'text-amber-500' },
+            { field: 'persona', label: 'Role / Persona', icon: UserCog, placeholder: 'e.g. "You are a senior SEO specialist with 10 years of experience"', color: 'text-violet-500' },
+            { field: 'behavior', label: 'Behavior', icon: BookOpen, placeholder: 'e.g. "Always analyze before acting, never guess, provide data-backed answers"', color: 'text-blue-500' },
+            { field: 'rules', label: 'Rules & Constraints', icon: ShieldAlert, placeholder: 'e.g. "Never make claims without citing sources. Do not request personal data."', color: 'text-amber-500' },
           ] as const).map((cfg) => (
             <Card key={cfg.field}>
               <CardHeader className="pb-2">

@@ -98,26 +98,40 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
   }, []);
 
   // Load chat history from DB
-  useEffect(() => {
-    if (historyLoaded) return;
+  const loadHistory = useCallback(() => {
     fetch(`/api/projects/${projectId}/chat`)
-      .then(res => res.ok ? res.json() : [])
+      .then(res => res.ok ? res.json() : Promise.reject('unauthorized'))
       .then((history: any[]) => {
-        if (history.length > 0) {
-          const msgs = history
-            .filter((m: any) => m.role === 'user' || m.role === 'assistant')
-            .map((m: any, idx: number) => ({
-              id: m.id || `h-${idx}`,
-              role: m.role as 'user' | 'assistant',
-              content: m.content,
-              createdAt: new Date(m.createdAt),
-            }));
-          setMessages(msgs);
-        }
+        if (!Array.isArray(history)) return;
+        const msgs = history
+          .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+          .map((m: any, idx: number) => ({
+            id: m.id || `h-${idx}`,
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+            createdAt: new Date(m.createdAt),
+          }));
+        setMessages(msgs);
         setHistoryLoaded(true);
       })
       .catch(() => setHistoryLoaded(true));
-  }, [projectId, historyLoaded]);
+  }, [projectId]);
+
+  // Load on mount
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  // Reload when tab becomes visible (user switched away and came back)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !isLoading) {
+        loadHistory();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [loadHistory, isLoading]);
 
   // Auto-scroll
   useEffect(() => {
@@ -206,25 +220,12 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
         };
         setMessages(prev => [...prev, assistantMsg]);
       } else {
-        // Stream ended with no text — fallback: load from DB after delay
-        setTimeout(async () => {
-          try {
-            const res = await fetch(`/api/projects/${projectId}/chat`);
-            if (!res.ok) return;
-            const history = await res.json();
-            if (history.length > 0) {
-              const msgs = history
-                .filter((m: any) => m.role === 'user' || m.role === 'assistant')
-                .map((m: any, idx: number) => ({
-                  id: m.id || `fb-${idx}`,
-                  role: m.role as 'user' | 'assistant',
-                  content: m.content,
-                  createdAt: new Date(m.createdAt),
-                }));
-              setMessages(msgs);
-            }
-          } catch { /* ignore */ }
-        }, 3000);
+        // Stream ended with no text — agent may still be running in background
+        // Retry loading from DB: immediate + 3s + 8s
+        const retryLoad = () => loadHistory();
+        retryLoad();
+        setTimeout(retryLoad, 3000);
+        setTimeout(retryLoad, 8000);
       }
     } catch (err: any) {
       setError(err.message || 'Connection error');
@@ -243,7 +244,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
   };
 
   const handleClearHistory = useCallback(async () => {
-    if (!confirm('Tüm sohbet geçmişi silinecek. Emin misiniz?')) return;
+    if (!confirm('All chat history will be deleted. Are you sure?')) return;
     try {
       await fetch(`/api/projects/${projectId}/chat`, { method: 'DELETE' });
       setMessages([]);
@@ -259,10 +260,10 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
     const isYesterday = d.toDateString() === yesterday.toDateString();
-    const time = d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
     if (isToday) return time;
-    if (isYesterday) return `Dün ${time}`;
-    return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }) + ` ${time}`;
+    if (isYesterday) return `Yesterday ${time}`;
+    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) + ` ${time}`;
   }, []);
 
   return (
@@ -290,7 +291,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
         {messages.length > 0 && (
           <Button variant="ghost" size="sm" onClick={handleClearHistory} className="text-xs text-muted-foreground hover:text-destructive gap-1">
             <Trash2 className="h-3 w-3" />
-            Temizle
+            Clear
           </Button>
         )}
       </div>
@@ -303,8 +304,8 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
             ) : (
               <Sparkles className="h-10 w-10 mb-3 opacity-20" />
             )}
-            <p className="text-sm">Captain Aktif (Claude Subscription)</p>
-            <p className="text-xs opacity-50">Orchestrator hazır. Nereden başlıyoruz?</p>
+            <p className="text-sm">Captain Active (Claude Subscription)</p>
+            <p className="text-xs opacity-50">Orchestrator ready. What are we working on?</p>
           </div>
         ) : (
           <>
@@ -353,7 +354,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
 
         {error && (
           <div className="rounded-md bg-red-950/40 border border-red-500/30 p-3 text-xs font-mono text-red-200">
-            <div className="font-bold text-red-400 mb-1">Hata:</div>
+            <div className="font-bold text-red-400 mb-1">Error:</div>
             {error}
           </div>
         )}
@@ -365,7 +366,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Kaptana komut verin..."
+          placeholder="Send a message to Captain..."
           disabled={isLoading}
           rows={Math.min(Math.max(input.split('\n').length, 1), 5)}
           className="flex-1 bg-card border border-input rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring custom-scrollbar"

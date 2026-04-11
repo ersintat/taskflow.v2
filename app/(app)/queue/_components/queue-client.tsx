@@ -71,7 +71,7 @@ export function QueueClient() {
   };
 
   const deleteSchedule = async (id: string, name: string) => {
-    if (!confirm(`"${name}" schedule silinecek. Emin misiniz?`)) return;
+    if (!confirm(`Delete schedule "${name}"? Are you sure?`)) return;
     await fetch(`/api/schedules/${id}`, { method: 'DELETE' });
     fetchSchedules();
     toast.success('Schedule deleted');
