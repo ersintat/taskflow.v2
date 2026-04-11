@@ -280,9 +280,9 @@ export function ActorDetailClient() {
               ) : (
                 <div className="space-y-2">
                   {(actor.capabilities || []).map((c: any) => (
-                    <div key={c.id} className="flex items-center justify-between">
-                      <span className="text-sm">{c.capabilityName}</span>
-                      <div className="flex gap-0.5">
+                    <div key={c.id} className="flex items-center gap-2">
+                      <span className="text-sm truncate flex-1 min-w-0">{c.capabilityName}</span>
+                      <div className="flex gap-0.5 shrink-0">
                         {[1, 2, 3, 4, 5].map((level) => (
                           <div
                             key={level}
