@@ -92,6 +92,7 @@ async function runAgentInBackground(
               description: 'Orchestrator Captain — PSNS Taskflow',
               prompt: systemPrompt,
               model: 'opus',
+              effort: 'max',
             },
           },
           mcpServers: {

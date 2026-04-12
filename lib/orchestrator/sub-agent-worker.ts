@@ -137,6 +137,7 @@ async function runSubAgent(queueItemId: string): Promise<void> {
             description: `Sub-agent: ${actor.name}`,
             prompt: systemPrompt,
             model: 'sonnet',
+            effort: 'high',
             maxTurns: 30,
           },
         },
