@@ -134,7 +134,7 @@ async function executeSchedule(schedule: any): Promise<void> {
       if (!taskId) throw new Error('enqueue_task action requires payload.taskId');
 
       const queueItem = await prisma.agentQueue.create({
-        data: { taskId, priority: payload.priority || 0, status: 'WAITING' },
+        data: { taskId, priority: typeof payload.queuePriority === 'number' ? payload.queuePriority : 0, status: 'WAITING' },
       });
 
       // Trigger worker
@@ -178,7 +178,7 @@ async function executeSchedule(schedule: any): Promise<void> {
 
       // Enqueue
       const queueItem = await prisma.agentQueue.create({
-        data: { taskId: task.id, priority: payload.priority || 0, status: 'WAITING' },
+        data: { taskId: task.id, priority: typeof payload.queuePriority === 'number' ? payload.queuePriority : 0, status: 'WAITING' },
       });
 
       // Trigger worker

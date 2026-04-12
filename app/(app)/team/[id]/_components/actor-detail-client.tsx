@@ -82,7 +82,7 @@ export function ActorDetailClient() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchActor = useCallback(() => {
-    fetch(`/api/actors/${params.id}`)
+    fetch(`/api/team/${params.id}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setActor(d))
       .catch((e) => console.error('[actor_detail_client]', e))
@@ -102,7 +102,7 @@ export function ActorDetailClient() {
     try {
       const formData = new FormData();
       formData.append('avatar', file);
-      const res = await fetch(`/api/actors/${params.id}/avatar`, { method: 'POST', body: formData });
+      const res = await fetch(`/api/team/${params.id}/avatar`, { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || 'Upload failed'); return; }
       setActor((prev: any) => prev ? { ...prev, avatarUrl: data.avatarUrl } : prev);
@@ -118,16 +118,16 @@ export function ActorDetailClient() {
   const handleDelete = useCallback(async () => {
     if (!confirm(`"${actor?.name}" will be deleted. Are you sure?`)) return;
     try {
-      const res = await fetch(`/api/actors/${params.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/team/${params.id}`, { method: 'DELETE' });
       if (!res.ok) { toast.error('Delete failed'); return; }
       toast.success('Agent deleted');
-      router.push('/actors');
+      router.push('/team');
     } catch { toast.error('Delete failed'); }
   }, [actor?.name, params.id, router]);
 
   const handleFieldSave = useCallback(async (field: string, value: string) => {
     try {
-      const res = await fetch(`/api/actors/${params.id}`, {
+      const res = await fetch(`/api/team/${params.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value || null }),
@@ -165,7 +165,7 @@ export function ActorDetailClient() {
   if (!actor) {
     return (
       <div className="p-6 max-w-[1000px] mx-auto">
-        <Button variant="ghost" size="sm" onClick={() => router.push('/actors')}>
+        <Button variant="ghost" size="sm" onClick={() => router.push('/team')}>
           <ArrowLeft className="h-4 w-4 mr-1" /> Back
         </Button>
         <div className="mt-12 text-center text-muted-foreground">Agent not found.</div>
@@ -181,7 +181,7 @@ export function ActorDetailClient() {
     <div className="p-6 max-w-[1000px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => router.push('/actors')}>
+        <Button variant="ghost" size="sm" onClick={() => router.push('/team')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>

@@ -40,7 +40,7 @@ const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/queue', label: 'Agent Queue', icon: Layers },
-  { href: '/actors', label: 'Team', icon: Users },
+  { href: '/team', label: 'Team', icon: Users },
   { href: '/settings/logs', label: 'System Logs', icon: ScrollText },
 ];
 
@@ -207,7 +207,7 @@ export function AppShellClient({ children }: { children: React.ReactNode }) {
             <Menu className="h-5 w-5" />
           </Button>
           <h1 className="font-display font-semibold text-base tracking-tight capitalize flex-1">
-            {pathname === '/' ? 'Dashboard' : pathname?.startsWith('/actors') ? 'Team' : pathname?.split('/')?.[1]?.replace(/-/g, ' ') ?? ''}
+            {pathname === '/' ? 'Dashboard' : pathname?.split('/')?.[1]?.replace(/-/g, ' ') ?? ''}
           </h1>
 
           <ThemeToggle />

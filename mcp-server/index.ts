@@ -35,10 +35,10 @@ async function logEvent(projectId: string | null, category: string, title: strin
 
 // ─── Orchestrator Actor Helper ───
 async function getOrCreateOrchestratorActor() {
-  let actor = await prisma.actor.findFirst({ where: { name: "Orchestrator", type: "SYSTEM" } });
+  let actor = await prisma.actor.findFirst({ where: { type: "SYSTEM" } });
   if (!actor) {
     actor = await prisma.actor.create({
-      data: { name: "Orchestrator", type: "SYSTEM", trustLevel: "full" },
+      data: { name: "Kaptan", type: "SYSTEM", trustLevel: "full" },
     });
   }
   return actor;

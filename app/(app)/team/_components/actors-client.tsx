@@ -126,7 +126,7 @@ export function ActorsClient() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {actors.map((actor: any) => (
-            <Card key={actor.id} className="border border-border hover:border-primary/30 hover:shadow-md transition-all cursor-pointer" onClick={() => router.push(`/actors/${actor.id}`)}>
+            <Card key={actor.id} className="border border-border hover:border-primary/30 hover:shadow-md transition-all cursor-pointer" onClick={() => router.push(`/team/${actor.id}`)}>
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
                   <ActorAvatar name={actor.name} type={actor.type} avatarUrl={actor.avatarUrl} size="xl" />
