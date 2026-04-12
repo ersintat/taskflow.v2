@@ -176,6 +176,14 @@ async function runAgentInBackground(
       await prisma.orchestratorChat.create({
         data: { projectId, role: 'assistant', content: fullContent },
       }).catch(() => {});
+    } else {
+      // Agent produced no content — log this anomaly
+      await prisma.orchestratorChat.create({
+        data: { projectId, role: 'assistant', content: '⚠️ Captain did not produce a response. This may be due to a rate limit, timeout, or connection issue. Please try again.' },
+      }).catch(() => {});
+      await prisma.systemLog.create({
+        data: { projectId, level: 'error', category: 'orchestrator', title: 'Captain produced no response', details: `User message: "${userMessage.substring(0, 200)}"` },
+      }).catch(() => {});
     }
 
     // Retention: clean old messages
@@ -187,8 +195,15 @@ async function runAgentInBackground(
     isComplete = true;
     emit({ type: 'done' });
     listeners.clear();
-  })().catch((err) => {
+  })().catch(async (err) => {
     console.error('Background agent fatal error:', err);
+    // Save error to DB so it's visible even if browser disconnected
+    await prisma.orchestratorChat.create({
+      data: { projectId, role: 'assistant', content: `⚠️ Fatal error: ${err.message || 'Unknown error'}. Please try again.` },
+    }).catch(() => {});
+    await prisma.systemLog.create({
+      data: { projectId, level: 'error', category: 'orchestrator', title: `Captain fatal error: ${err.message?.substring(0, 100)}`, details: err.stack?.substring(0, 500) },
+    }).catch(() => {});
     isComplete = true;
     emit({ type: 'error', content: `Fatal: ${err.message}` });
     emit({ type: 'done' });

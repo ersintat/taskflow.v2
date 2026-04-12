@@ -228,7 +228,13 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
         setTimeout(retryLoad, 8000);
       }
     } catch (err: any) {
-      setError(err.message || 'Connection error');
+      const msg = err.message || 'Connection error';
+      setError(msg.includes('fetch') || msg.includes('network') || msg.includes('Failed')
+        ? 'Connection lost. Captain may still be working in the background — refresh to check.'
+        : msg
+      );
+      // Retry loading from DB after error — agent may have completed in background
+      setTimeout(() => loadHistory(), 5000);
     } finally {
       setIsLoading(false);
       setStreamingContent('');
