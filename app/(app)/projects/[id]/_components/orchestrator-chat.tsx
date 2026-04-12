@@ -91,7 +91,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
     fetch('/api/actors')
       .then(r => r.ok ? r.json() : [])
       .then((actors: any[]) => {
-        const orch = actors.find((a: any) => a.type === 'SYSTEM' || a.name === 'Orchestrator');
+        const orch = actors.find((a: any) => a.type === 'SYSTEM');
         if (orch?.avatarUrl) setCaptainAvatar(orch.avatarUrl);
       })
       .catch((e) => console.error('[orchestrator_chat]', e));

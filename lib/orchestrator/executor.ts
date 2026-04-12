@@ -397,10 +397,10 @@ async function executeCreateSubtask(projectId: string, args: any): Promise<ToolC
 async function executeAddComment(projectId: string, args: any): Promise<ToolCallResult> {
   try {
     // Find or create a system actor for Orchestrator comments
-    let orchestratorActor = await prisma.actor.findFirst({ where: { name: 'Orchestrator', type: 'SYSTEM' } });
+    let orchestratorActor = await prisma.actor.findFirst({ where: { type: 'SYSTEM' } });
     if (!orchestratorActor) {
       orchestratorActor = await prisma.actor.create({
-        data: { name: 'Orchestrator', type: 'SYSTEM', trustLevel: 'full' },
+        data: { name: 'Kaptan', type: 'SYSTEM', trustLevel: 'full' },
       });
     }
 
@@ -424,10 +424,10 @@ async function executeAddComment(projectId: string, args: any): Promise<ToolCall
 // ─── Approve/Reject Task ───
 async function executeApproveReject(projectId: string, args: any): Promise<ToolCallResult> {
   try {
-    let orchestratorActor = await prisma.actor.findFirst({ where: { name: 'Orchestrator', type: 'SYSTEM' } });
+    let orchestratorActor = await prisma.actor.findFirst({ where: { type: 'SYSTEM' } });
     if (!orchestratorActor) {
       orchestratorActor = await prisma.actor.create({
-        data: { name: 'Orchestrator', type: 'SYSTEM', trustLevel: 'full' },
+        data: { name: 'Kaptan', type: 'SYSTEM', trustLevel: 'full' },
       });
     }
 
