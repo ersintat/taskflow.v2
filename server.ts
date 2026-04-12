@@ -9,7 +9,7 @@ import os from 'os';
 import { initScheduler } from './lib/scheduler';
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = 'localhost';
+const hostname = '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
 
 const app = next({ dev, hostname, port });
@@ -66,7 +66,7 @@ app.prepare().then(() => {
             args: ["tsx", path.join(process.cwd(), "mcp-server/index.ts")],
             env: {
               PROJECT_ID: projectId,
-              DATABASE_URL: "file:" + path.join(process.cwd(), "dev.db")
+              DATABASE_URL: process.env.DATABASE_URL || "file:" + path.join(process.cwd(), "dev.db")
             }
           };
           

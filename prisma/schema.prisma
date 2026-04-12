@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-    provider = "sqlite"
+    provider = "postgresql"
     url      = env("DATABASE_URL")
 }
 
@@ -28,7 +28,7 @@ model User {
 model Project {
   id          String   @id @default(cuid())
   name        String
-  description String?
+  description String?   @db.Text
   status      String   @default("active") // active | archived
   color       String   @default("#6366f1") // Project icon color
   ownerId     String   @map("owner_id")
@@ -38,7 +38,7 @@ model Project {
   // Project Config
   claudeWorkDir   String?  @map("claude_work_dir")   // Claude CLI working directory path
   autoMission     Boolean  @default(false) @map("auto_mission") // Orchestrator can create missions without asking
-  connectedApis   String?  @map("connected_apis") // JSON: {shopify: {apiKey: "..."}, ...}
+  connectedApis   String?  @db.Text  @map("connected_apis") // JSON: {shopify: {apiKey: "..."}, ...}
 
   owner      User             @relation(fields: [ownerId], references: [id])
   categories TaskCategory[]
@@ -75,7 +75,7 @@ model Task {
   projectId   String    @map("project_id")
   categoryId  String?   @map("category_id")
   title       String
-  description String?
+  description String?   @db.Text
   status      String    @default("todo") // todo | in_progress | done | blocked | pending_review | pending_acceptance | cancelled
   priority    String    @default("medium") // urgent | high | medium | low
   taskType    String    @default("action") @map("task_type") // action | report | audit | monitor
@@ -109,9 +109,9 @@ model Actor {
   avatarUrl  String?  @map("avatar_url")
   model      String?  // AI model ID (e.g., "gemini-2.0-flash", "claude-sonnet-4-20250514")
   trustLevel String   @default("SUPERVISED") @map("trust_level") // FULL | SUPERVISED | RESTRICTED
-  persona    String?  // Role/persona description: "Sen kıdemli bir SEO uzmanısın"
-  behavior   String?  // Behavioral guidelines: "önce analiz et, sonra cevap ver"
-  rules      String?  // Constraints/policies: "kaynak göstermeden kesin konuşma"
+  persona    String?  @db.Text // Role/persona description: "Sen kıdemli bir SEO uzmanısın"
+  behavior   String?  @db.Text // Behavioral guidelines: "önce analiz et, sonra cevap ver"
+  rules      String?  @db.Text // Constraints/policies: "kaynak göstermeden kesin konuşma"
   isActive   Boolean  @default(true) @map("is_active")
   createdAt  DateTime @default(now()) @map("created_at")
 
@@ -163,8 +163,8 @@ model TaskActivity {
   taskId      String   @map("task_id")
   actorId     String?  @map("actor_id")
   eventType   String   @map("event_type")
-  description String
-  metadata    String?  // JSON string
+  description String   @db.Text
+  metadata    String?  @db.Text // JSON string
   createdAt   DateTime @default(now()) @map("created_at")
 
   task  Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -180,7 +180,7 @@ model Comment {
   id        String   @id @default(cuid())
   taskId    String   @map("task_id")
   actorId   String   @map("actor_id")
-  content   String
+  content   String   @db.Text
   parentId  String?  @map("parent_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -200,8 +200,8 @@ model Decision {
   actorId      String   @map("actor_id")
   decisionType String   @map("decision_type") // APPROVAL | REJECTION | REDIRECT | DESIGN_CHOICE | TECHNICAL_DECISION
   title        String
-  decision     String
-  rationale    String?
+  decision     String   @db.Text
+  rationale    String?  @db.Text
   createdAt    DateTime @default(now()) @map("created_at")
 
   task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -234,7 +234,7 @@ model AgentQueue {
   claimedAt   DateTime? @map("claimed_at")
   completedAt DateTime? @map("completed_at")
   budgetCents Int?      @map("budget_cents")
-  result      String?   // JSON string
+  result      String?  @db.Text // JSON string
   createdAt   DateTime  @default(now()) @map("created_at")
 
   task    Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -248,7 +248,7 @@ model KnowledgeBase {
   id        String   @id @default(cuid())
   projectId String   @map("project_id")
   title     String
-  content   String
+  content   String   @db.Text
   type      String   // LESSON_LEARNED | DECISION_RATIONALE | TECHNICAL_NOTE | PROCESS_NOTE | REFERENCE | FAQ
   tags      String   @default("[]") // JSON array stored as string
   createdBy String?  @map("created_by")
@@ -265,7 +265,7 @@ model ProjectContext {
   id        String   @id @default(cuid())
   projectId String   @map("project_id")
   key       String
-  value     String
+  value     String   @db.Text
   version   Int      @default(1)
   createdBy String?  @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
@@ -281,7 +281,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
   title     String
-  message   String
+  message   String   @db.Text
   type      String   @default("info") // info | success | warning | error
   read      Boolean  @default(false)
   link      String?
@@ -298,13 +298,13 @@ model AgentMission {
   id            String    @id @default(cuid())
   projectId     String    @map("project_id")
   title         String
-  prompt        String    // Detailed prompt/instructions
+  prompt        String   @db.Text // Detailed prompt/instructions
   targetService String    @map("target_service") // shopify | gmc | google_ads | meta | ga4 | gsc | klaviyo | general
   missionType   String    @map("mission_type") @default("data_pull") // data_pull | analysis | action | report
   status        String    @default("pending") // pending | claimed | running | completed | failed | cancelled
   priority      Int       @default(0)
-  result        String?   // JSON string from Claude CLI
-  logs          String?   // intermediate outputs
+  result        String?  @db.Text // JSON string from Claude CLI
+  logs          String?  @db.Text // intermediate outputs
   errorMessage  String?   @map("error_message")
   claimedAt     DateTime? @map("claimed_at")
   completedAt   DateTime? @map("completed_at")
@@ -336,8 +336,8 @@ model OrchestratorChat {
   id        String   @id @default(cuid())
   projectId String   @map("project_id")
   role      String   // user | assistant | system | tool_result
-  content   String
-  metadata  String?  // JSON - tool calls, mission refs, etc.
+  content   String   @db.Text
+  metadata  String?  @db.Text  // JSON - tool calls, mission refs, etc.
   createdAt DateTime @default(now()) @map("created_at")
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -353,7 +353,7 @@ model SystemLog {
   level     String   @default("info") // info | warning | error | action
   category  String   // orchestrator | mission | bridge | system | api
   title     String
-  details   String?  // Log details text
+  details   String?  @db.Text // Log details text
   createdAt DateTime @default(now()) @map("created_at")
 
   project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -395,7 +395,7 @@ model Schedule {
   cron        String                         // Cron expression: "0 9 * * *"
   timezone    String    @default("Europe/Istanbul")
   action      String                         // "create_task" | "enqueue_task" | "run_agent"
-  payload     String                         // JSON: task template or config
+  payload     String   @db.Text // JSON: task template or config
   agentId     String?   @map("agent_id")
   isActive    Boolean   @default(true) @map("is_active")
   lastRunAt   DateTime? @map("last_run_at")
