@@ -2,7 +2,7 @@
   "name": "app",
   "private": true,
   "scripts": {
-    "dev": "rm -rf .next && tsx server.ts",
+    "dev": "rm -rf .next && mkdir -p .next && xattr -w com.google.drivefs.donotsync 1 .next 2>/dev/null; xattr -w com.apple.fileprovider.ignore 1 .next 2>/dev/null; tsx server.ts",
     "build": "next build && rm -rf .next",
     "start": "NODE_ENV=production tsx server.ts",
     "lint": "next lint"
