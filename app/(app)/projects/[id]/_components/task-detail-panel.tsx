@@ -81,7 +81,7 @@ export function TaskDetailPanel({ taskId, onClose, onUpdate }: Props) {
     fetch(`/api/tasks/${taskId}`)
       .then((r) => r.json())
       .then((d: any) => setTask(d))
-      .catch(() => {})
+      .catch((e) => console.error('[task_detail_panel]', e))
       .finally(() => setLoading(false));
   }, [taskId]);
 
@@ -89,21 +89,21 @@ export function TaskDetailPanel({ taskId, onClose, onUpdate }: Props) {
     fetch(`/api/tasks/${taskId}/decide`)
       .then((r) => r.json())
       .then((d: any) => setDecisions(Array.isArray(d) ? d : []))
-      .catch(() => {});
+      .catch((e) => console.error('[task_detail_panel]', e));
   }, [taskId]);
 
   const fetchComments = useCallback(() => {
     fetch(`/api/tasks/${taskId}/comments`)
       .then((r) => r.json())
       .then((d: any) => setComments(Array.isArray(d) ? d : []))
-      .catch(() => {});
+      .catch((e) => console.error('[task_detail_panel]', e));
   }, [taskId]);
 
   const fetchSubtasks = useCallback(() => {
     fetch(`/api/tasks/${taskId}/subtasks`)
       .then((r) => r.json())
       .then((d: any) => setSubtasks(Array.isArray(d) ? d : []))
-      .catch(() => {});
+      .catch((e) => console.error('[task_detail_panel]', e));
   }, [taskId]);
 
   useEffect(() => {
@@ -111,7 +111,7 @@ export function TaskDetailPanel({ taskId, onClose, onUpdate }: Props) {
     fetchDecisions();
     fetchComments();
     fetchSubtasks();
-    fetch('/api/actors').then((r) => r.json()).then((d: any) => setActors(Array.isArray(d) ? d : [])).catch(() => {});
+    fetch('/api/actors').then((r) => r.json()).then((d: any) => setActors(Array.isArray(d) ? d : [])).catch((e) => console.error('[task_detail_panel]', e));
   }, [fetchTask, fetchDecisions, fetchComments, fetchSubtasks]);
 
   const patchTask = async (field: string, value: any) => {

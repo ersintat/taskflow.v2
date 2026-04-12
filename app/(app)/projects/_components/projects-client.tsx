@@ -37,7 +37,7 @@ export function ProjectsClient() {
     fetch('/api/projects')
       .then((r) => r.json())
       .then((d: any) => setProjects(Array.isArray(d) ? d : []))
-      .catch(() => {})
+      .catch((e) => console.error('[projects_client]', e))
       .finally(() => setLoading(false));
   }, []);
 

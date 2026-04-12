@@ -35,7 +35,7 @@ export default function LoginPage() {
       } else {
         router.replace('/');
       }
-    } catch {
+    } catch (e: any) {
       toast.error('Something went wrong');
     } finally {
       setLoading(false);

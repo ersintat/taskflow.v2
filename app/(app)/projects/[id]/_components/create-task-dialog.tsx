@@ -31,7 +31,7 @@ export function CreateTaskDialog({ projectId, categories, open, onOpenChange, on
 
   useEffect(() => {
     if (open) {
-      fetch('/api/actors').then((r) => r.json()).then((d: any) => setActors(Array.isArray(d) ? d : [])).catch(() => {});
+      fetch('/api/actors').then((r) => r.json()).then((d: any) => setActors(Array.isArray(d) ? d : [])).catch((e) => console.error('[create_task_dialog]', e));
     }
   }, [open]);
 

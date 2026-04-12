@@ -60,7 +60,7 @@ export function KnowledgeTab({ projectId }: Props) {
     fetch(`/api/projects/${projectId}/knowledge?${params}`)
       .then((r) => r.json())
       .then((d: any) => setEntries(Array.isArray(d) ? d : []))
-      .catch(() => {})
+      .catch((e) => console.error('[knowledge_tab]', e))
       .finally(() => setLoading(false));
   }, [projectId, searchQuery, filterType]);
 

@@ -15,7 +15,7 @@ async function logEvent(projectId: string | null, title: string, details?: strin
     await prisma.systemLog.create({
       data: { projectId, category: 'sub_agent', title, details, level },
     });
-  } catch { /* non-blocking */ }
+  } catch (e: any) { console.error('[logEvent] sub-agent:', e.message); }
 }
 
 /**
@@ -48,11 +48,13 @@ export async function triggerSubAgentWorker(queueItemId: string): Promise<void> 
         await syncTaskCategory(item.taskId, 'blocked');
         await logEvent(item.taskId, `Sub-agent failed: ${msg}`, undefined, 'error');
       }
-    } catch { /* best-effort */ }
+    } catch (recoveryErr: any) {
+      console.error(`[CRITICAL] Sub-agent recovery failed for ${queueItemId}:`, recoveryErr.message);
+    }
   } finally {
     clearTimeout(timeout);
     activeWorkers--;
-    processNextInQueue().catch(() => {});
+    processNextInQueue().catch((e) => console.error('[processNextInQueue]', e.message));
   }
 }
 
@@ -62,7 +64,7 @@ async function processNextInQueue(): Promise<void> {
     where: { status: 'WAITING' },
     orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
   });
-  if (next) triggerSubAgentWorker(next.id).catch(() => {});
+  if (next) triggerSubAgentWorker(next.id).catch((e) => console.error('[triggerNext]', e.message));
 }
 
 /**
@@ -179,7 +181,7 @@ async function runSubAgent(queueItemId: string): Promise<void> {
             completionTokens: u.output_tokens || 0,
             totalTokens,
             taskId: queueItem.taskId,
-          }).catch(() => {});
+          }).catch((e: any) => console.error('[sub-agent-worker]', e.message));
         }
       }
     }
@@ -227,7 +229,7 @@ async function runSubAgent(queueItemId: string): Promise<void> {
         type: 'success',
         link: `/projects/${projectId}`,
       },
-    }).catch(() => {});
+    }).catch((e: any) => console.error('[sub-agent-worker]', e.message));
   }
 
   console.log(`Sub-agent "${actor.name}" finished "${queueItem.task.title}"`);

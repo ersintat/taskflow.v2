@@ -94,7 +94,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
         const orch = actors.find((a: any) => a.type === 'SYSTEM' || a.name === 'Orchestrator');
         if (orch?.avatarUrl) setCaptainAvatar(orch.avatarUrl);
       })
-      .catch(() => {});
+      .catch((e) => console.error('[orchestrator_chat]', e));
   }, []);
 
   // Load chat history from DB

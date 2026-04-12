@@ -67,7 +67,11 @@ export async function DELETE(
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  await prisma.agentMission.delete({ where: { id: params.missionId } }).catch(() => {});
-
-  return NextResponse.json({ ok: true });
+  try {
+    await prisma.agentMission.delete({ where: { id: params.missionId } });
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    console.error('DELETE mission error:', err.message);
+    return NextResponse.json({ error: 'Failed to delete mission' }, { status: 500 });
+  }
 }

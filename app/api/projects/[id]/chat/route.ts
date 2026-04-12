@@ -270,7 +270,7 @@ export async function POST(
               title: `Orchestrator executed ${toolActions.length} tool(s)`,
               details: JSON.stringify(toolActions.map(a => ({ tool: a.tool, success: a.result?.success }))),
             },
-          }).catch(() => {});
+          }).catch((e: any) => console.error('[chat-route]', e.message));
         }
 
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
@@ -289,7 +289,7 @@ export async function POST(
         // Save error response
         await prisma.orchestratorChat.create({
           data: { projectId, role: 'assistant', content: errorContent },
-        }).catch(() => {});
+        }).catch((e: any) => console.error('[chat-route]', e.message));
       } finally {
         controller.close();
       }

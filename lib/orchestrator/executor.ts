@@ -15,7 +15,7 @@ async function logEvent(projectId: string | null, category: string, title: strin
     await prisma.systemLog.create({
       data: { projectId, category, title, details, level },
     });
-  } catch { /* non-blocking */ }
+  } catch (e: any) { console.error('[logEvent] executor:', e.message); }
 }
 
 // ─── Tool Executors ───

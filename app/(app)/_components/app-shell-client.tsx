@@ -80,7 +80,7 @@ export function AppShellClient({ children }: { children: React.ReactNode }) {
         setNotifications(d.notifications ?? []);
         setUnreadCount(d.unreadCount ?? 0);
       })
-      .catch(() => {});
+      .catch((e) => console.error('[app_shell_client]', e));
   }, []);
 
   useEffect(() => {

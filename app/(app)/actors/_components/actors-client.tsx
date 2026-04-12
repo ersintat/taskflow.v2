@@ -33,7 +33,7 @@ export function ActorsClient() {
     fetch('/api/actors')
       .then((r) => r.json())
       .then((d: any) => setActors(Array.isArray(d) ? d : []))
-      .catch(() => {})
+      .catch((e) => console.error('[actors_client]', e))
       .finally(() => setLoading(false));
   }, []);
 

@@ -63,7 +63,7 @@ export async function PATCH(
       title: 'Project config updated',
       details: JSON.stringify(data),
     },
-  }).catch(() => {});
+  }).catch((e: any) => console.error('[config] log error:', e.message));
 
   return NextResponse.json(updated);
 }

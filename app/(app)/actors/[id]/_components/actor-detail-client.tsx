@@ -85,7 +85,7 @@ export function ActorDetailClient() {
     fetch(`/api/actors/${params.id}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setActor(d))
-      .catch(() => {})
+      .catch((e) => console.error('[actor_detail_client]', e))
       .finally(() => setLoading(false));
   }, [params.id]);
 

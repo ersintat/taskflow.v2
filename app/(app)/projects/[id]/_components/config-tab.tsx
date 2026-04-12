@@ -30,7 +30,7 @@ export function ConfigTab({ projectId }: { projectId: string }) {
         setConfig(d);
         setAutoMission(d.autoMission || false);
       })
-      .catch(() => {})
+      .catch((e) => console.error('[config_tab]', e))
       .finally(() => setLoading(false));
   }, [projectId]);
 

@@ -21,7 +21,7 @@ async function logEvent(projectId: string | null, title: string, details?: strin
     await prisma.systemLog.create({
       data: { projectId, category: 'scheduler', title, details, level },
     });
-  } catch { /* non-blocking */ }
+  } catch (e: any) { console.error('[logEvent] scheduler:', e.message); }
 }
 
 // ─── Cron → Next Run Date ───
@@ -243,7 +243,7 @@ async function tick(): Promise<void> {
             nextRunAt: getNextRunAt(schedule.cron, schedule.timezone),
             lastError: err.message,
           },
-        }).catch(() => {});
+        }).catch((e: any) => console.error('[Scheduler] Failed to update schedule after error:', e.message));
 
         await logEvent(schedule.projectId, `Schedule "${schedule.name}" failed: ${err.message}`, undefined, 'error');
       }
@@ -261,11 +261,11 @@ export function initScheduler(): void {
 
   // Run first tick after 5 seconds (let the server fully start)
   setTimeout(() => {
-    tick().catch(() => {});
+    tick().catch((e) => console.error('[Scheduler] Initial tick failed:', e.message));
   }, 5000);
 
   tickInterval = setInterval(() => {
-    tick().catch(() => {});
+    tick().catch((e) => console.error('[Scheduler] Tick failed:', e.message));
   }, TICK_INTERVAL);
 }
 

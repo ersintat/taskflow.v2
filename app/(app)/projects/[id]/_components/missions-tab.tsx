@@ -67,7 +67,7 @@ export function MissionsTab({ projectId }: { projectId: string }) {
         setMissions(d.missions ?? []);
         setStatusCounts(d.statusCounts ?? {});
       })
-      .catch(() => {});
+      .catch((e) => console.error('[missions_tab]', e));
   }, [projectId, filterStatus]);
 
   useEffect(() => {

@@ -312,7 +312,7 @@ If you detect problems:
   let governanceSection = '';
   const governancePath = path.join(workspacePath, 'governance');
   let hasGovernance = false;
-  try { hasGovernance = fs.existsSync(governancePath); } catch { /* ignore */ }
+  try { hasGovernance = fs.existsSync(governancePath); } catch (e: any) { console.error('[system-prompt] governance check:', e.message); }
 
   if (hasGovernance) {
     governanceSection = `## Governance Framework
@@ -373,7 +373,7 @@ ${snapshot.agentSummary}
         workspaceContext = `\n--- WORKSPACE DOMAIN KNOWLEDGE (from CLAUDE.md) ---\n${content}\n---`;
       }
     }
-  } catch { /* ignore */ }
+  } catch (e: any) { console.error('[system-prompt] CLAUDE.md read:', e.message); }
 
   // --- Assemble ---
   const sections = [

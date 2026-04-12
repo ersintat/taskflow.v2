@@ -26,7 +26,7 @@ export function EnqueueDialog({ open, onOpenChange, onCreated }: Props) {
   // Fetch projects on open
   useEffect(() => {
     if (open) {
-      fetch('/api/projects').then((r) => r.json()).then((d: any) => setProjects(Array.isArray(d) ? d : [])).catch(() => {});
+      fetch('/api/projects').then((r) => r.json()).then((d: any) => setProjects(Array.isArray(d) ? d : [])).catch((e) => console.error('[enqueue_dialog]', e));
     }
   }, [open]);
 

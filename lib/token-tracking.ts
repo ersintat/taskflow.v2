@@ -44,5 +44,5 @@ export async function trackTokenUsage(params: TokenUsageParams): Promise<void> {
         taskId: params.taskId || null,
       },
     });
-  } catch { /* non-blocking */ }
+  } catch (e: any) { console.error('[trackTokenUsage]', e.message); }
 }

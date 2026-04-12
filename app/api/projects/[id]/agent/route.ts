@@ -155,7 +155,7 @@ async function runAgentInBackground(
               promptTokens: u.input_tokens || u.inputTokens || 0,
               completionTokens: u.output_tokens || u.outputTokens || 0,
               totalTokens: (u.input_tokens || 0) + (u.output_tokens || 0),
-            }).catch(() => {});
+            }).catch((e: any) => console.error('[agent-route]', e.message));
           }
         }
       }
@@ -168,29 +168,29 @@ async function runAgentInBackground(
       // Save error as assistant message
       await prisma.orchestratorChat.create({
         data: { projectId, role: 'assistant', content: errMsg },
-      }).catch(() => {});
+      }).catch((e: any) => console.error('[agent-route]', e.message));
     }
 
     // Save assistant response (always — regardless of browser connection)
     if (fullContent.trim()) {
       await prisma.orchestratorChat.create({
         data: { projectId, role: 'assistant', content: fullContent },
-      }).catch(() => {});
+      }).catch((e: any) => console.error('[agent-route]', e.message));
     } else {
       // Agent produced no content — log this anomaly
       await prisma.orchestratorChat.create({
         data: { projectId, role: 'assistant', content: '⚠️ Captain did not produce a response. This may be due to a rate limit, timeout, or connection issue. Please try again.' },
-      }).catch(() => {});
+      }).catch((e: any) => console.error('[agent-route]', e.message));
       await prisma.systemLog.create({
         data: { projectId, level: 'error', category: 'orchestrator', title: 'Captain produced no response', details: `User message: "${userMessage.substring(0, 200)}"` },
-      }).catch(() => {});
+      }).catch((e: any) => console.error('[agent-route]', e.message));
     }
 
     // Retention: clean old messages
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     await prisma.orchestratorChat.deleteMany({
       where: { projectId, createdAt: { lt: sevenDaysAgo } },
-    }).catch(() => {});
+    }).catch((e: any) => console.error('[agent-route]', e.message));
 
     isComplete = true;
     emit({ type: 'done' });
@@ -200,10 +200,10 @@ async function runAgentInBackground(
     // Save error to DB so it's visible even if browser disconnected
     await prisma.orchestratorChat.create({
       data: { projectId, role: 'assistant', content: `⚠️ Fatal error: ${err.message || 'Unknown error'}. Please try again.` },
-    }).catch(() => {});
+    }).catch((e: any) => console.error('[agent-route]', e.message));
     await prisma.systemLog.create({
       data: { projectId, level: 'error', category: 'orchestrator', title: `Captain fatal error: ${err.message?.substring(0, 100)}`, details: err.stack?.substring(0, 500) },
-    }).catch(() => {});
+    }).catch((e: any) => console.error('[agent-route]', e.message));
     isComplete = true;
     emit({ type: 'error', content: `Fatal: ${err.message}` });
     emit({ type: 'done' });
@@ -240,7 +240,7 @@ export async function POST(
   // Save user message
   await prisma.orchestratorChat.create({
     data: { projectId, role: 'user', content: userMessage.trim() },
-  }).catch(() => {});
+  }).catch((e: any) => console.error('[agent-route]', e.message));
 
   // Start agent in background (runs independently of this SSE stream)
   const { subscribe } = await runAgentInBackground(projectId, userMessage.trim());

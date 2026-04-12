@@ -47,7 +47,7 @@ export function QueueClient() {
     fetch('/api/queue')
       .then((r) => r.json())
       .then((d: any) => setData(d))
-      .catch(() => {})
+      .catch((e) => console.error('[queue_client]', e))
       .finally(() => setLoading(false));
   }, []);
 
@@ -55,7 +55,7 @@ export function QueueClient() {
     fetch('/api/schedules')
       .then((r) => r.ok ? r.json() : [])
       .then((d: any) => setSchedules(Array.isArray(d) ? d : []))
-      .catch(() => {});
+      .catch((e) => console.error('[queue_client]', e));
   }, []);
 
   useEffect(() => { fetchData(); fetchSchedules(); }, [fetchData, fetchSchedules]);

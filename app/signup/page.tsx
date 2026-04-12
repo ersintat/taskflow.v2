@@ -53,7 +53,7 @@ export default function SignupPage() {
         toast.success('Welcome to PSNS Taskflow!');
         router.replace('/');
       }
-    } catch {
+    } catch (e: any) {
       toast.error('Something went wrong');
     } finally {
       setLoading(false);

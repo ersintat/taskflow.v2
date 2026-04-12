@@ -31,5 +31,5 @@ export async function syncTaskCategory(taskId: string, newStatus: string): Promi
         data: { categoryId: category.id },
       });
     }
-  } catch { /* non-blocking */ }
+  } catch (e: any) { console.error('[syncTaskCategory]', taskId, e.message); }
 }

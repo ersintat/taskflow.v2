@@ -108,7 +108,7 @@ ${comments.length > 0 ? `### Previous Comments\n${comments.map(c => `- ${c.conte
       governanceSection = `## GOVERNANCE
 This workspace has governance rules in the governance/ directory. Read them with executeBash if your task involves risk assessment or compliance.`;
     }
-  } catch { /* ignore */ }
+  } catch (e: any) { console.error('[sub-agent-prompt] governance check:', e.message); }
 
   const toolGuidance = `## TOOL USAGE
 

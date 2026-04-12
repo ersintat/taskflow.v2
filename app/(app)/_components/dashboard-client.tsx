@@ -36,7 +36,7 @@ export function DashboardClient() {
       .then((d: any) => {
         if (d?.stats) setData(d);
       })
-      .catch(() => {})
+      .catch((e) => console.error('[dashboard_client]', e))
       .finally(() => setLoading(false));
   }, []);
 

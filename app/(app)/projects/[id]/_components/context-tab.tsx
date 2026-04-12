@@ -49,7 +49,7 @@ export function ContextTab({ projectId }: Props) {
     fetch(`/api/projects/${projectId}/context`)
       .then((r) => r.json())
       .then((d: any) => setContexts(Array.isArray(d) ? d : []))
-      .catch(() => {})
+      .catch((e) => console.error('[context_tab]', e))
       .finally(() => setLoading(false));
   }, [projectId]);
 
