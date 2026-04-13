@@ -47,9 +47,9 @@ const ChatBubble = memo(function ChatBubble({ msg, formatTimestamp, userAvatarUr
         avatarUrl={msg.role === 'user' ? userAvatarUrl : botAvatarUrl}
         fallbackIcon={msg.role === 'user' ? 'user' : 'bot'}
       />
-      <div className={`flex flex-col gap-1 max-w-[80%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-        <div className={`rounded-lg px-4 py-2 ${msg.role === 'user' ? 'bg-zinc-800 text-slate-200' : 'bg-indigo-950/30 text-slate-300 border border-indigo-500/10'}`}>
-          <div className="chat-markdown text-[13px]" style={{ fontFamily: '"SF Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace' }}>
+      <div className={`flex flex-col gap-1 max-w-[80%] min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+        <div className={`rounded-lg px-4 py-2 overflow-hidden ${msg.role === 'user' ? 'bg-zinc-800 text-slate-200' : 'bg-indigo-950/30 text-slate-300 border border-indigo-500/10'}`}>
+          <div className="chat-markdown text-[13px] overflow-x-auto" style={{ fontFamily: '"SF Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace' }}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
           </div>
           {msg.toolCalls && msg.toolCalls.length > 0 && (
@@ -305,7 +305,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
         )}
       </div>
 
-      <div className="flex-1 rounded-xl overflow-y-auto border border-border bg-[#0d0d0d] p-4 shadow-inner flex flex-col gap-4 custom-scrollbar">
+      <div className="flex-1 rounded-xl overflow-y-auto overflow-x-hidden border border-border bg-[#0d0d0d] p-4 shadow-inner flex flex-col gap-4 custom-scrollbar min-w-0">
         {messages.length === 0 && !isLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
             {captainAvatar ? (
@@ -326,10 +326,10 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
             {isLoading && (streamingContent || streamingTools.length > 0) && (
               <div className="flex gap-3">
                 <ChatAvatar role="assistant" avatarUrl={captainAvatar} fallbackIcon="bot" />
-                <div className="flex flex-col gap-1 max-w-[80%] items-start">
-                  <div className="rounded-lg px-4 py-2 bg-indigo-950/30 text-slate-300 border border-indigo-500/10">
+                <div className="flex flex-col gap-1 max-w-[80%] min-w-0 items-start">
+                  <div className="rounded-lg px-4 py-2 overflow-hidden bg-indigo-950/30 text-slate-300 border border-indigo-500/10">
                     {streamingContent && (
-                      <div className="chat-markdown text-[13px]" style={{ fontFamily: '"SF Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace' }}>
+                      <div className="chat-markdown text-[13px] overflow-x-auto" style={{ fontFamily: '"SF Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace' }}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingContent}</ReactMarkdown>
                       </div>
                     )}
