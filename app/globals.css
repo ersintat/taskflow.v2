@@ -221,3 +221,20 @@
 .chat-markdown p { margin: 4px 0; }
 .chat-markdown strong { color: #e2e8f0; }
 .chat-markdown a { color: #818cf8; text-decoration: underline; }
+
+/* Content markdown — theme-aware (for light/dark pages like actor detail) */
+.content-markdown { overflow-x: auto; overflow-wrap: break-word; word-break: break-word; }
+.content-markdown table { display: block; border-collapse: collapse; width: 100%; max-width: 100%; overflow-x: auto; margin: 8px 0; font-size: 12px; }
+.content-markdown th { background: hsl(var(--muted)); border: 1px solid hsl(var(--border)); padding: 8px 12px; text-align: left; font-weight: 600; }
+.content-markdown td { border: 1px solid hsl(var(--border)); padding: 6px 12px; }
+.content-markdown code { background: hsl(var(--muted)); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.content-markdown pre { background: hsl(var(--muted)); padding: 12px; border-radius: 6px; overflow-x: auto; max-width: 100%; margin: 8px 0; }
+.content-markdown pre code { background: none; padding: 0; }
+.content-markdown h1, .content-markdown h2, .content-markdown h3 { margin-top: 12px; margin-bottom: 6px; font-weight: 700; }
+.content-markdown h2 { font-size: 16px; }
+.content-markdown h3 { font-size: 14px; }
+.content-markdown ul { padding-left: 20px; margin: 4px 0; list-style-type: disc; }
+.content-markdown ol { padding-left: 20px; margin: 4px 0; list-style-type: decimal; }
+.content-markdown li { margin: 2px 0; }
+.content-markdown p { margin: 4px 0; }
+.content-markdown a { color: hsl(var(--primary)); text-decoration: underline; }

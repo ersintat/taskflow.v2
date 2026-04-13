@@ -616,7 +616,7 @@ export function TaskDetailPanel({ taskId, onClose, onUpdate }: Props) {
                             </div>
                           </div>
                         ) : (
-                          <div className="text-sm text-muted-foreground mt-0.5 chat-markdown">
+                          <div className="text-sm mt-0.5 content-markdown">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.content}</ReactMarkdown>
                           </div>
                         )}

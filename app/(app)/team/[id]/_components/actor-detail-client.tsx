@@ -406,7 +406,7 @@ export function ActorDetailClient() {
                 <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
                   {(actor.comments || []).map((c: any) => (
                     <div key={c.id} className="p-3 rounded-lg border border-border">
-                      <div className="text-sm chat-markdown">
+                      <div className="text-sm content-markdown">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.content}</ReactMarkdown>
                       </div>
                       {c.task && <div className="text-[10px] text-muted-foreground mt-1">→ {c.task.title}</div>}
