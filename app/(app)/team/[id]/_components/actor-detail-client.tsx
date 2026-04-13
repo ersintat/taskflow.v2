@@ -8,6 +8,8 @@ import {
   Camera, Loader2, Trash2, Save, UserCog, BookOpen, ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -404,7 +406,9 @@ export function ActorDetailClient() {
                 <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
                   {(actor.comments || []).map((c: any) => (
                     <div key={c.id} className="p-3 rounded-lg border border-border">
-                      <div className="text-sm">{c.content}</div>
+                      <div className="text-sm chat-markdown">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.content}</ReactMarkdown>
+                      </div>
                       {c.task && <div className="text-[10px] text-muted-foreground mt-1">→ {c.task.title}</div>}
                       <div className="text-[10px] text-muted-foreground/60 mt-1">{formatTime(c.createdAt)}</div>
                     </div>
