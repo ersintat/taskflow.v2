@@ -82,6 +82,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [captainAvatar, setCaptainAvatar] = useState<string | null>(null);
+  const [rateLimit, setRateLimit] = useState<{ utilization?: number; status?: string; resetsAt?: number; rateLimitType?: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession() || {};
   const userImage = (session?.user as any)?.image ?? null;
@@ -199,6 +200,8 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
               setStreamingTools([...tools]);
             } else if (parsed.type === 'error') {
               setError(parsed.content);
+            } else if (parsed.type === 'rate_limit' && parsed.rateLimit) {
+              setRateLimit(parsed.rateLimit);
             }
             // Legacy format (from chat route)
             else if (parsed.content && !parsed.type) {
@@ -288,7 +291,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
               Orchestrator Captain
               <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                Claude Opus 4.5
+                Claude (Subscription) Opus 4.6
               </span>
             </h3>
             <p className="text-[10px] text-muted-foreground">PSNS Taskflow Orchestrator</p>
@@ -310,7 +313,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
             ) : (
               <Sparkles className="h-10 w-10 mb-3 opacity-20" />
             )}
-            <p className="text-sm">Captain Active (Claude Subscription)</p>
+            <p className="text-sm">Captain Active (Claude Opus 4.6)</p>
             <p className="text-xs opacity-50">Orchestrator ready. What are we working on?</p>
           </div>
         ) : (
@@ -382,6 +385,36 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
           <Send className="h-4 w-4" />
         </Button>
       </form>
+
+      {/* Rate Limit Bar */}
+      {rateLimit && rateLimit.utilization != null && (
+        <div className="mt-2">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  rateLimit.utilization < 0.6 ? 'bg-emerald-500' :
+                  rateLimit.utilization < 0.9 ? 'bg-amber-500' :
+                  'bg-red-500'
+                }`}
+                style={{ width: `${Math.round(rateLimit.utilization * 100)}%` }}
+              />
+            </div>
+            <span className={`text-[10px] font-mono tabular-nums ${
+              rateLimit.utilization < 0.6 ? 'text-emerald-500' :
+              rateLimit.utilization < 0.9 ? 'text-amber-500' :
+              'text-red-500'
+            }`}>
+              {Math.round(rateLimit.utilization * 100)}%
+            </span>
+            {rateLimit.resetsAt && rateLimit.utilization >= 0.9 && (
+              <span className="text-[10px] text-muted-foreground">
+                resets {new Date(rateLimit.resetsAt * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -15,16 +15,25 @@ function getMcpServerPath(): string {
   return path.join(process.cwd(), 'mcp-server', 'index.ts');
 }
 
+// Track last known rate limit across requests
+let lastRateLimitInfo: { utilization?: number; resetsAt?: number; rateLimitType?: string; status?: string } | null = null;
+
 // ─── Background Agent Runner ───
 // Runs Agent SDK query() independently of browser connection.
 // SSE stream pipes events while open; if browser disconnects, agent keeps running.
 
 interface AgentEvent {
-  type: 'text' | 'tool' | 'tool_progress' | 'error' | 'done';
+  type: 'text' | 'tool' | 'tool_progress' | 'error' | 'done' | 'rate_limit';
   content?: string;
   tool?: string;
   args?: any;
   elapsed?: number;
+  rateLimit?: {
+    status: string;
+    utilization?: number;
+    resetsAt?: number;
+    rateLimitType?: string;
+  };
 }
 
 type EventListener = (event: AgentEvent) => void;
@@ -59,7 +68,16 @@ async function runAgentInBackground(
       fs.mkdirSync(workspacePath, { recursive: true });
     }
 
-    const systemPrompt = await buildOrchestratorPrompt(projectId, workspacePath);
+    let systemPrompt = await buildOrchestratorPrompt(projectId, workspacePath);
+
+    // Inject last known rate limit info into system prompt
+    if (lastRateLimitInfo?.utilization != null) {
+      const pct = Math.round(lastRateLimitInfo.utilization * 100);
+      const resetStr = lastRateLimitInfo.resetsAt
+        ? new Date(lastRateLimitInfo.resetsAt * 1000).toISOString()
+        : 'unknown';
+      systemPrompt += `\n\n--- CURRENT RATE LIMIT ---\nQuota utilization: ${pct}%\nStatus: ${lastRateLimitInfo.status}\nResets at: ${resetStr}\n---`;
+    }
 
     const recentChat = await prisma.orchestratorChat.findMany({
       where: { projectId },
@@ -132,6 +150,26 @@ async function runAgentInBackground(
           if (se.type === 'content_block_delta' && se.delta.type === 'text_delta') {
             fullContent += se.delta.text;
             emit({ type: 'text', content: se.delta.text });
+          }
+        } else if (event.type === 'rate_limit_event') {
+          const info = (event as any).rate_limit_info;
+          if (info) {
+            console.log(`[RateLimit] status=${info.status} utilization=${info.utilization} type=${info.rateLimitType} resetsAt=${info.resetsAt}`);
+            lastRateLimitInfo = {
+              utilization: info.utilization,
+              resetsAt: info.resetsAt,
+              rateLimitType: info.rateLimitType,
+              status: info.status,
+            };
+            emit({
+              type: 'rate_limit',
+              rateLimit: {
+                status: info.status,
+                utilization: info.utilization,
+                resetsAt: info.resetsAt,
+                rateLimitType: info.rateLimitType,
+              },
+            });
           }
         } else if (event.type === 'tool_progress') {
           const toolName = (event.tool_name || '').replace('mcp__taskflow-tools__', '');
