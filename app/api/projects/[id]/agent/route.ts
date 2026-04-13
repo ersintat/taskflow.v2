@@ -177,13 +177,19 @@ async function runAgentInBackground(
           const toolName = (event.tool_name || '').replace('mcp__taskflow-tools__', '');
           emit({ type: 'tool_progress', tool: toolName, elapsed: event.elapsed_time_seconds });
         } else if (event.type === 'result') {
-          if (event.subtype === 'success' && event.result && !fullContent) {
-            fullContent = event.result;
-            emit({ type: 'text', content: event.result });
-          } else if (event.subtype !== 'success') {
-            const errorMsg = ('errors' in event && event.errors?.length) ? event.errors.join(', ') : 'An error occurred';
-            fullContent += `\n\u26a0\ufe0f ${errorMsg}`;
+          console.log(`[Result] subtype=${event.subtype} hasResult=${!!(event as any).result} contentLen=${fullContent.length}`);
+          if (event.subtype === 'success') {
+            // Append result text if we don't have content yet
+            if (event.result && !fullContent) {
+              fullContent = event.result;
+              emit({ type: 'text', content: event.result });
+            }
+          } else {
+            // Error result (error_max_turns, error_max_budget, etc.)
+            const errorMsg = ('errors' in event && event.errors?.length) ? event.errors.join(', ') : `Agent stopped: ${event.subtype}`;
+            fullContent += `\n\n⚠️ ${errorMsg}`;
             emit({ type: 'error', content: errorMsg });
+            console.error(`[Result-Error] ${event.subtype}: ${errorMsg}`);
           }
 
           // Track usage from result
@@ -238,10 +244,25 @@ async function runAgentInBackground(
     }
 
     // Save assistant response (always — regardless of browser connection)
+    console.log(`[Save] fullContent length=${fullContent.length} projectId=${projectId}`);
     if (fullContent.trim()) {
-      await prisma.orchestratorChat.create({
-        data: { projectId, role: 'assistant', content: fullContent },
-      }).catch((e: any) => console.error('[agent-route]', e.message));
+      try {
+        await prisma.orchestratorChat.create({
+          data: { projectId, role: 'assistant', content: fullContent },
+        });
+        console.log(`[Save] Assistant message saved (${fullContent.length} chars)`);
+      } catch (saveErr: any) {
+        console.error(`[Save] FAILED to save assistant message: ${saveErr.message}`);
+        // Retry once
+        try {
+          await prisma.orchestratorChat.create({
+            data: { projectId, role: 'assistant', content: fullContent.substring(0, 50000) },
+          });
+          console.log(`[Save] Retry succeeded (truncated to 50k)`);
+        } catch (retryErr: any) {
+          console.error(`[Save] RETRY ALSO FAILED: ${retryErr.message}`);
+        }
+      }
     } else {
       // Agent produced no content — log this anomaly
       await prisma.orchestratorChat.create({
