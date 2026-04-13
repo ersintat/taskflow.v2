@@ -132,7 +132,6 @@ async function runAgentInBackground(
       });
 
       for await (const event of agentStream) {
-        console.log(`[SDK-EVENT] type=${event.type}${event.type === 'stream_event' ? ' subtype=' + (event as any).event?.type : ''}`);
         if (event.type === 'assistant') {
           // Add paragraph break between assistant turns (after tool calls)
           if (fullContent.length > 0 && !fullContent.endsWith('\n\n')) {
