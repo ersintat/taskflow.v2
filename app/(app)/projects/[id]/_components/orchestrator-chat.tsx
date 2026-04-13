@@ -288,13 +288,13 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
           )}
           <div>
             <h3 className="text-sm font-semibold flex items-center gap-2">
-              Orchestrator Captain
+              Kaptan
               <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
                 Claude (Subscription) Opus 4.6
               </span>
             </h3>
-            <p className="text-[10px] text-muted-foreground">PSNS Taskflow Orchestrator</p>
+            <p className="text-[10px] text-muted-foreground">PSNS Taskflow</p>
           </div>
         </div>
         {messages.length > 0 && (
@@ -314,7 +314,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
               <Sparkles className="h-10 w-10 mb-3 opacity-20" />
             )}
             <p className="text-sm">Captain Active (Claude Opus 4.6)</p>
-            <p className="text-xs opacity-50">Orchestrator ready. What are we working on?</p>
+            <p className="text-xs opacity-50">Kaptan ready. What are we working on?</p>
           </div>
         ) : (
           <>

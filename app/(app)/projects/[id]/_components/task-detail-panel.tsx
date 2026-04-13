@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   X,
   Calendar,
@@ -614,7 +616,9 @@ export function TaskDetailPanel({ taskId, onClose, onUpdate }: Props) {
                             </div>
                           </div>
                         ) : (
-                          <p className="text-sm text-muted-foreground mt-0.5 whitespace-pre-wrap">{c.content}</p>
+                          <div className="text-sm text-muted-foreground mt-0.5 chat-markdown">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.content}</ReactMarkdown>
+                          </div>
                         )}
                         {editingCommentId !== c.id && (
                           <div className="flex items-center gap-2 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">

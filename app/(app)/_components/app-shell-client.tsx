@@ -66,6 +66,7 @@ export function AppShellClient({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { data: session } = useSession() || {};
   const userName = session?.user?.name ?? 'User';
+  const userImage = (session?.user as any)?.image ?? null;
   const userInitials = userName
     .split(' ')
     .map((w: string) => w?.[0] ?? '')
@@ -174,9 +175,13 @@ export function AppShellClient({ children }: { children: React.ReactNode }) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-sm hover:bg-accent transition-colors text-left">
-                <div className="h-7 w-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
-                  {userInitials}
-                </div>
+                {userImage ? (
+                  <img src={userImage} alt={userName} className="h-7 w-7 rounded-full object-cover shrink-0 border border-border" />
+                ) : (
+                  <div className="h-7 w-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
+                    {userInitials}
+                  </div>
+                )}
                 <span className="truncate flex-1 font-medium">{userName}</span>
                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               </button>

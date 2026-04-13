@@ -330,6 +330,55 @@ server.tool(
 );
 
 // ════════════════════════════════════════════════════════
+// 6b. update_agent
+// ════════════════════════════════════════════════════════
+server.tool(
+  "update_agent",
+  "Update an existing agent's name, persona, behavior, rules, trust level, or active status.",
+  {
+    agentId: z.string().describe("The agent ID to update"),
+    name: z.string().optional().describe("New agent name"),
+    persona: z.string().optional().describe("Updated role/persona description"),
+    behavior: z.string().optional().describe("Updated behavioral guidelines"),
+    rules: z.string().optional().describe("Updated constraints/policies"),
+    trustLevel: z.enum(["full", "high", "medium", "low", "probation"]).optional().describe("Updated trust level"),
+    isActive: z.boolean().optional().describe("Set agent active/inactive"),
+  },
+  async (args) => {
+    try {
+      const updateData: any = {};
+      if (args.name !== undefined) updateData.name = args.name;
+      if (args.persona !== undefined) updateData.persona = args.persona;
+      if (args.behavior !== undefined) updateData.behavior = args.behavior;
+      if (args.rules !== undefined) updateData.rules = args.rules;
+      if (args.trustLevel !== undefined) updateData.trustLevel = args.trustLevel;
+      if (args.isActive !== undefined) updateData.isActive = args.isActive;
+
+      if (Object.keys(updateData).length === 0) {
+        return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "No fields to update" }) }] };
+      }
+
+      const actor = await prisma.actor.update({
+        where: { id: args.agentId },
+        data: updateData,
+      });
+
+      await logEvent(PROJECT_ID, "orchestrator", `Agent updated: ${actor.name}`, JSON.stringify({ updated: Object.keys(updateData) }), "action");
+
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify({
+          success: true, actorId: actor.id, name: actor.name,
+          updatedFields: Object.keys(updateData),
+          message: `Agent "${actor.name}" updated: ${Object.keys(updateData).join(", ")}`,
+        }) }],
+      };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
 // 7. list_tasks
 // ════════════════════════════════════════════════════════
 server.tool(
