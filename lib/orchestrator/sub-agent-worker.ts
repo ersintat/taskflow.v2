@@ -87,30 +87,33 @@ async function runSubAgent(queueItemId: string): Promise<void> {
 
   if (!queueItem || queueItem.status !== 'WAITING') return;
 
-  const agentAssignment = queueItem.task.assignments.find((a: any) => a.actor.type === 'AGENT');
+  // TypeScript: queueItem is guaranteed non-null after this point
+  const qi = queueItem!;
+
+  const agentAssignment = qi.task.assignments.find((a: any) => a.actor.type === 'AGENT');
   if (!agentAssignment) {
-    throw new Error(`No agent assigned to task "${queueItem.task.title}"`);
+    throw new Error(`No agent assigned to task "${qi.task.title}"`);
   }
 
   const actor = agentAssignment.actor;
-  const projectId = queueItem.task.projectId;
+  const projectId = qi.task.projectId;
   const workspacePath = path.join(process.cwd(), 'workspaces', projectId);
   const mcpServerScript = path.join(process.cwd(), 'mcp-server', 'index.ts');
   const dbUrl = process.env.DATABASE_URL || 'file:./dev.db';
 
-  await logEvent(projectId, `Sub-agent "${actor.name}" starting: ${queueItem.task.title}`);
+  await logEvent(projectId, `Sub-agent "${actor.name}" starting: ${qi.task.title}`);
 
   // Update queue to RUNNING
   await prisma.agentQueue.update({
     where: { id: queueItemId },
     data: { status: 'RUNNING', claimedBy: actor.id, claimedAt: new Date() },
   });
-  await prisma.task.update({ where: { id: queueItem.taskId }, data: { status: 'in_progress' } });
-  await syncTaskCategory(queueItem.taskId, 'in_progress');
+  await prisma.task.update({ where: { id: qi.taskId }, data: { status: 'in_progress' } });
+  await syncTaskCategory(qi.taskId, 'in_progress');
 
   await prisma.taskActivity.create({
     data: {
-      taskId: queueItem.taskId,
+      taskId: qi.taskId,
       actorId: actor.id,
       eventType: 'claimed',
       description: `Sub-agent "${actor.name}" started work`,
@@ -118,11 +121,11 @@ async function runSubAgent(queueItemId: string): Promise<void> {
   });
 
   // Build prompt
-  const systemPrompt = await buildSubAgentPrompt(actor, queueItem.task, projectId, workspacePath);
-  const taskPrompt = `Execute this task now:\n\n**${queueItem.task.title}**\n\n${queueItem.task.description || 'No description.'}\n\nUse your tools. When finished, provide a clear summary.`;
+  const systemPrompt = await buildSubAgentPrompt(actor, qi.task, projectId, workspacePath);
+  const taskPrompt = `Execute this task now:\n\n**${qi.task.title}**\n\n${qi.task.description || 'No description.'}\n\nUse your tools. When finished, provide a clear summary.`;
 
   // Run via Agent SDK (subscription — no API key needed)
-  console.log(`Sub-agent "${actor.name}" executing "${queueItem.task.title}" via Agent SDK (sonnet)`);
+  console.log(`Sub-agent "${actor.name}" executing "${qi.task.title}" via Agent SDK (sonnet)`);
 
   let fullContent = '';
   let totalTokens = 0;
@@ -191,7 +194,7 @@ async function runSubAgent(queueItemId: string): Promise<void> {
             promptTokens: u.input_tokens || 0,
             completionTokens: u.output_tokens || 0,
             totalTokens,
-            taskId: queueItem.taskId,
+            taskId: qi.taskId,
           }).catch((e: any) => console.error('[sub-agent-worker]', e.message));
         }
       }
@@ -236,12 +239,12 @@ async function runSubAgent(queueItemId: string): Promise<void> {
     },
   });
 
-  await prisma.task.update({ where: { id: queueItem.taskId }, data: { status: 'pending_review' } });
-  await syncTaskCategory(queueItem.taskId, 'pending_review');
+  await prisma.task.update({ where: { id: qi.taskId }, data: { status: 'pending_review' } });
+  await syncTaskCategory(qi.taskId, 'pending_review');
 
   await prisma.taskActivity.create({
     data: {
-      taskId: queueItem.taskId,
+      taskId: qi.taskId,
       actorId: actor.id,
       eventType: 'status_changed',
       description: `Sub-agent "${actor.name}" completed work`,
@@ -249,7 +252,7 @@ async function runSubAgent(queueItemId: string): Promise<void> {
     },
   });
 
-  await logEvent(projectId, `Sub-agent "${actor.name}" completed: ${queueItem.task.title}`, summary.substring(0, 500), 'action');
+  await logEvent(projectId, `Sub-agent "${actor.name}" completed: ${qi.task.title}`, summary.substring(0, 500), 'action');
 
   // Notify project owner
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
@@ -258,12 +261,12 @@ async function runSubAgent(queueItemId: string): Promise<void> {
       data: {
         userId: project.ownerId,
         title: `${actor.name} completed task`,
-        message: `"${queueItem.task.title}" completed, awaiting review.`,
+        message: `"${qi.task.title}" completed, awaiting review.`,
         type: 'success',
         link: `/projects/${projectId}`,
       },
     }).catch((e: any) => console.error('[sub-agent-worker]', e.message));
   }
 
-  console.log(`Sub-agent "${actor.name}" finished "${queueItem.task.title}"`);
+  console.log(`Sub-agent "${actor.name}" finished "${qi.task.title}"`);
 }
