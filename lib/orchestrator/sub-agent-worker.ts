@@ -187,8 +187,13 @@ async function runSubAgent(queueItemId: string): Promise<void> {
       }
     }
   } catch (err: any) {
-    // If agent SDK itself fails, wrap the error
-    throw new Error(`Sub-agent "${actor.name}" execution failed: ${err.message}`);
+    const msg = err.message || 'Unknown error';
+    const isRateLimit = /rate.limit|overloaded|529|too many|quota|capacity/i.test(msg);
+    const errorType = isRateLimit ? 'Rate limit reached' : 'Execution failed';
+
+    await logEvent(projectId, `Sub-agent "${actor.name}" ${errorType}`, msg.substring(0, 300), 'error');
+
+    throw new Error(`Sub-agent "${actor.name}" ${errorType}: ${msg}`);
   }
 
   // Report completion

@@ -162,13 +162,38 @@ async function runAgentInBackground(
       }
     } catch (error: any) {
       console.error('Agent SDK error:', error);
-      const errMsg = `Error: ${error.message || 'Unknown error'}`;
-      fullContent += errMsg;
-      emit({ type: 'error', content: errMsg });
+      const msg = error.message || 'Unknown error';
+
+      // Detect rate limit / overload
+      const isRateLimit = /rate.limit|overloaded|529|too many|quota|capacity/i.test(msg);
+      const isTimeout = /timeout|timed out|ETIMEDOUT|ECONNRESET/i.test(msg);
+
+      let userMessage: string;
+      if (isRateLimit) {
+        userMessage = '⚠️ Captain is temporarily unavailable — Claude rate limit reached. Please wait a few minutes and try again.';
+      } else if (isTimeout) {
+        userMessage = '⚠️ Captain request timed out. The operation may have been too complex. Please try a simpler request or try again later.';
+      } else {
+        userMessage = `⚠️ Captain encountered an error: ${msg}`;
+      }
+
+      fullContent += userMessage;
+      emit({ type: 'error', content: userMessage });
 
       // Save error as assistant message
       await prisma.orchestratorChat.create({
-        data: { projectId, role: 'assistant', content: errMsg },
+        data: { projectId, role: 'assistant', content: userMessage },
+      }).catch((e: any) => console.error('[agent-route]', e.message));
+
+      // Log to system logs
+      await prisma.systemLog.create({
+        data: {
+          projectId,
+          level: 'error',
+          category: 'orchestrator',
+          title: isRateLimit ? 'Rate limit reached' : isTimeout ? 'Request timeout' : 'Agent SDK error',
+          details: msg.substring(0, 500),
+        },
       }).catch((e: any) => console.error('[agent-route]', e.message));
     }
 
