@@ -152,6 +152,11 @@
 }
 
 /* Chat markdown table styles */
+.chat-markdown {
+  overflow-x: auto;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
 .chat-markdown table {
   border-collapse: collapse;
   width: 100%;

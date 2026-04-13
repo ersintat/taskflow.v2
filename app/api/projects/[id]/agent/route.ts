@@ -71,12 +71,14 @@ async function runAgentInBackground(
     let systemPrompt = await buildOrchestratorPrompt(projectId, workspacePath);
 
     // Inject last known rate limit info into system prompt
-    if (lastRateLimitInfo?.utilization != null) {
-      const pct = Math.round(lastRateLimitInfo.utilization * 100);
+    if (lastRateLimitInfo) {
       const resetStr = lastRateLimitInfo.resetsAt
         ? new Date(lastRateLimitInfo.resetsAt * 1000).toISOString()
         : 'unknown';
-      systemPrompt += `\n\n--- CURRENT RATE LIMIT ---\nQuota utilization: ${pct}%\nStatus: ${lastRateLimitInfo.status}\nResets at: ${resetStr}\n---`;
+      const utilizationStr = lastRateLimitInfo.utilization != null
+        ? `${Math.round(lastRateLimitInfo.utilization * 100)}%`
+        : lastRateLimitInfo.status || 'unknown';
+      systemPrompt += `\n\n--- CURRENT RATE LIMIT ---\nQuota: ${utilizationStr}\nStatus: ${lastRateLimitInfo.status}\nResets at: ${resetStr}\nType: ${lastRateLimitInfo.rateLimitType || 'unknown'}\n---`;
     }
 
     const recentChat = await prisma.orchestratorChat.findMany({

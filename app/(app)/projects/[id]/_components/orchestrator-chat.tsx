@@ -276,7 +276,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
   }, []);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-280px)] min-h-[400px]">
+    <div className="flex flex-col h-[calc(100vh-280px)] min-h-[400px] overflow-x-hidden w-full">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           {captainAvatar ? (
@@ -387,27 +387,48 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
       </form>
 
       {/* Rate Limit Bar */}
-      {rateLimit && rateLimit.utilization != null && (
+      {rateLimit && (
         <div className="mt-2">
           <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  rateLimit.utilization < 0.6 ? 'bg-emerald-500' :
-                  rateLimit.utilization < 0.9 ? 'bg-amber-500' :
-                  'bg-red-500'
-                }`}
-                style={{ width: `${Math.round(rateLimit.utilization * 100)}%` }}
-              />
-            </div>
-            <span className={`text-[10px] font-mono tabular-nums ${
-              rateLimit.utilization < 0.6 ? 'text-emerald-500' :
-              rateLimit.utilization < 0.9 ? 'text-amber-500' :
-              'text-red-500'
-            }`}>
-              {Math.round(rateLimit.utilization * 100)}%
-            </span>
-            {rateLimit.resetsAt && rateLimit.utilization >= 0.9 && (
+            {rateLimit.utilization != null ? (
+              <>
+                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      rateLimit.utilization < 0.6 ? 'bg-emerald-500' :
+                      rateLimit.utilization < 0.9 ? 'bg-amber-500' :
+                      'bg-red-500'
+                    }`}
+                    style={{ width: `${Math.round(rateLimit.utilization * 100)}%` }}
+                  />
+                </div>
+                <span className={`text-[10px] font-mono tabular-nums ${
+                  rateLimit.utilization < 0.6 ? 'text-emerald-500' :
+                  rateLimit.utilization < 0.9 ? 'text-amber-500' :
+                  'text-red-500'
+                }`}>
+                  {Math.round(rateLimit.utilization * 100)}%
+                </span>
+              </>
+            ) : (
+              <>
+                <div className={`w-2 h-2 rounded-full ${
+                  rateLimit.status === 'allowed' ? 'bg-emerald-500' :
+                  rateLimit.status === 'allowed_warning' ? 'bg-amber-500 animate-pulse' :
+                  'bg-red-500 animate-pulse'
+                }`} />
+                <span className={`text-[10px] ${
+                  rateLimit.status === 'allowed' ? 'text-emerald-500' :
+                  rateLimit.status === 'allowed_warning' ? 'text-amber-500' :
+                  'text-red-500'
+                }`}>
+                  {rateLimit.status === 'allowed' ? 'Quota OK' :
+                   rateLimit.status === 'allowed_warning' ? 'Quota Warning' :
+                   'Quota Limit Reached'}
+                </span>
+              </>
+            )}
+            {rateLimit.resetsAt && rateLimit.status !== 'allowed' && (
               <span className="text-[10px] text-muted-foreground">
                 resets {new Date(rateLimit.resetsAt * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
               </span>
