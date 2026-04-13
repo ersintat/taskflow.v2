@@ -127,32 +127,43 @@ async function runSubAgent(queueItemId: string): Promise<void> {
   let fullContent = '';
   let totalTokens = 0;
 
-  try {
-    const agentStream = query({
-      prompt: taskPrompt,
-      options: {
-        agent: 'sub-agent',
-        agents: {
-          'sub-agent': {
-            description: `Sub-agent: ${actor.name}`,
-            prompt: systemPrompt,
-            model: 'sonnet',
-            effort: 'high',
-            maxTurns: 30,
-          },
-        },
-        cwd: workspacePath,
-        mcpServers: {
-          'taskflow-tools': {
-            command: 'npx',
-            args: ['tsx', mcpServerScript],
-            env: { DATABASE_URL: dbUrl, PROJECT_ID: projectId },
-          },
-        },
-        allowedTools: ['mcp__taskflow-tools__*', 'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
-        permissionMode: 'acceptEdits',
+  const agentOptions = {
+    agent: 'sub-agent',
+    agents: {
+      'sub-agent': {
+        description: `Sub-agent: ${actor.name}`,
+        prompt: systemPrompt,
+        model: 'sonnet' as string,
+        effort: 'high' as const,
+        maxTurns: 30,
       },
-    });
+    },
+    cwd: workspacePath,
+    mcpServers: {
+      'taskflow-tools': {
+        command: 'npx',
+        args: ['tsx', mcpServerScript],
+        env: { DATABASE_URL: dbUrl, PROJECT_ID: projectId },
+      },
+    },
+    allowedTools: ['mcp__taskflow-tools__*', 'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
+    permissionMode: 'acceptEdits' as const,
+  };
+
+  // Run agent — with API key fallback on rate limit
+  async function executeAgent(useApiKey: boolean): Promise<void> {
+    const options: any = { ...agentOptions };
+    if (useApiKey) {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set — cannot fallback to API');
+      options.env = { ANTHROPIC_API_KEY: apiKey };
+      options.agents = {
+        'sub-agent': { ...agentOptions.agents['sub-agent'], model: 'opus', effort: 'max' },
+      };
+      console.log(`[sub-agent] Fallback to API key (Opus) for "${actor.name}"`);
+    }
+
+    const agentStream = query({ prompt: taskPrompt, options });
 
     for await (const event of agentStream) {
       if (event.type === 'assistant') {
@@ -169,14 +180,13 @@ async function runSubAgent(queueItemId: string): Promise<void> {
           throw new Error(`Agent SDK error: ${errors}`);
         }
 
-        // Track usage
         if ('usage' in event && event.usage) {
           const u = event.usage as any;
           totalTokens = (u.input_tokens || 0) + (u.output_tokens || 0);
           await trackTokenUsage({
             projectId,
             actorId: actor.id,
-            model: 'claude-sonnet-subscription',
+            model: useApiKey ? 'claude-opus-api' : 'claude-sonnet-subscription',
             source: 'sub_agent',
             promptTokens: u.input_tokens || 0,
             completionTokens: u.output_tokens || 0,
@@ -186,14 +196,31 @@ async function runSubAgent(queueItemId: string): Promise<void> {
         }
       }
     }
+  }
+
+  try {
+    await executeAgent(false); // subscription first
   } catch (err: any) {
     const msg = err.message || 'Unknown error';
-    const isRateLimit = /rate.limit|overloaded|529|too many|quota|capacity/i.test(msg);
-    const errorType = isRateLimit ? 'Rate limit reached' : 'Execution failed';
+    const isRateLimit = /rate.limit|overloaded|529|too many|quota|capacity|hit your limit/i.test(msg);
 
-    await logEvent(projectId, `Sub-agent "${actor.name}" ${errorType}`, msg.substring(0, 300), 'error');
-
-    throw new Error(`Sub-agent "${actor.name}" ${errorType}: ${msg}`);
+    if (isRateLimit && process.env.ANTHROPIC_API_KEY) {
+      // Fallback to API key with Opus
+      console.log(`[sub-agent] Subscription rate limit hit for "${actor.name}", falling back to API key`);
+      await logEvent(projectId, `Sub-agent "${actor.name}" rate limit — switching to API`, msg.substring(0, 200), 'warning');
+      fullContent = ''; // reset
+      totalTokens = 0;
+      try {
+        await executeAgent(true); // API key fallback
+      } catch (apiErr: any) {
+        await logEvent(projectId, `Sub-agent "${actor.name}" API fallback also failed`, apiErr.message?.substring(0, 300), 'error');
+        throw new Error(`Sub-agent "${actor.name}" failed on both subscription and API: ${apiErr.message}`);
+      }
+    } else {
+      const errorType = isRateLimit ? 'Rate limit reached (no API key configured)' : 'Execution failed';
+      await logEvent(projectId, `Sub-agent "${actor.name}" ${errorType}`, msg.substring(0, 300), 'error');
+      throw new Error(`Sub-agent "${actor.name}" ${errorType}: ${msg}`);
+    }
   }
 
   // Report completion
@@ -230,8 +257,8 @@ async function runSubAgent(queueItemId: string): Promise<void> {
     await prisma.notification.create({
       data: {
         userId: project.ownerId,
-        title: `${actor.name} görevini tamamladı`,
-        message: `"${queueItem.task.title}" tamamlandı, onay bekliyor.`,
+        title: `${actor.name} completed task`,
+        message: `"${queueItem.task.title}" completed, awaiting review.`,
         type: 'success',
         link: `/projects/${projectId}`,
       },
