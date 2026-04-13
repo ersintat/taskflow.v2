@@ -276,7 +276,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
   }, []);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-280px)] min-h-[400px] overflow-x-hidden w-full">
+    <div className="flex flex-col h-[calc(100vh-280px)] min-h-[400px]">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           {captainAvatar ? (
