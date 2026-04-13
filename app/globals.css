@@ -158,8 +158,11 @@
   word-break: break-word;
 }
 .chat-markdown table {
+  display: block;
   border-collapse: collapse;
   width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
   margin: 8px 0;
   font-size: 12px;
 }
@@ -188,6 +191,7 @@
   padding: 12px;
   border-radius: 6px;
   overflow-x: auto;
+  max-width: 100%;
   margin: 8px 0;
 }
 .chat-markdown pre code {
