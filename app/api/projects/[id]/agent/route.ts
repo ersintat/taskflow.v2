@@ -314,6 +314,12 @@ export async function GET(
   const active = activeProjects.get(params.id);
   if (active) {
     const elapsed = Math.round((Date.now() - active.startedAt) / 1000);
+    // Auto-clear stale sessions (>10 minutes)
+    if (elapsed > 600) {
+      activeProjects.delete(params.id);
+      console.log(`[agent-route] Stale session cleared for ${params.id} (${elapsed}s)`);
+      return NextResponse.json({ active: false });
+    }
     return NextResponse.json({ active: true, elapsed });
   }
   return NextResponse.json({ active: false });
