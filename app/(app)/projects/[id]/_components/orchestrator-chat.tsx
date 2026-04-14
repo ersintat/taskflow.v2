@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback, memo } from 'react';
-import { Bot, User, Send, Loader2, Sparkles, TerminalSquare, Trash2 } from 'lucide-react';
+import { User, Send, Loader2, Sparkles, TerminalSquare, Trash2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import ReactMarkdown from 'react-markdown';
@@ -101,9 +101,17 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
   // Load chat history from DB
   const loadHistory = useCallback(() => {
     fetch(`/api/projects/${projectId}/chat`)
-      .then(res => res.ok ? res.json() : Promise.reject('unauthorized'))
-      .then((history: any[]) => {
-        if (!Array.isArray(history)) return;
+      .then(res => {
+        if (!res.ok) {
+          console.error('[loadHistory] HTTP', res.status);
+          return null;
+        }
+        return res.json();
+      })
+      .then((history: any[] | null) => {
+        if (!history || !Array.isArray(history)) return;
+        // Only update if we got actual messages — never clear with empty
+        if (history.length === 0) return;
         const msgs = history
           .filter((m: any) => m.role === 'user' || m.role === 'assistant')
           .map((m: any, idx: number) => ({
@@ -112,10 +120,15 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
             content: m.content,
             createdAt: new Date(m.createdAt),
           }));
-        setMessages(msgs);
+        if (msgs.length > 0) {
+          setMessages(msgs);
+        }
         setHistoryLoaded(true);
       })
-      .catch(() => setHistoryLoaded(true));
+      .catch((e) => {
+        console.error('[loadHistory] fetch error:', e);
+        // Don't clear messages on error — keep whatever is on screen
+      });
   }, [projectId]);
 
   // Load on mount
