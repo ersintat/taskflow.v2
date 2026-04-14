@@ -269,4 +269,16 @@ async function runSubAgent(queueItemId: string): Promise<void> {
   }
 
   console.log(`Sub-agent "${actor.name}" finished "${qi.task.title}"`);
+
+  // Auto-trigger captain review (fire-and-forget)
+  const captainBaseUrl = process.env.NEXTAUTH_URL || process.env.BASE_URL || 'http://localhost:3000';
+  const captainSecret = process.env.INTERNAL_SECRET || 'taskflow-internal-2026';
+  fetch(`${captainBaseUrl}/api/internal/trigger-captain`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-internal-secret': captainSecret },
+    body: JSON.stringify({
+      projectId,
+      message: `[AUTO] Sub-agent "${actor.name}" completed task "${qi.task.title}". Review the results and decide: approve or reject.`,
+    }),
+  }).catch((err) => console.error('[sub-agent] captain trigger failed:', err.message));
 }
