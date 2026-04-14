@@ -83,6 +83,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [captainAvatar, setCaptainAvatar] = useState<string | null>(null);
   const [rateLimit, setRateLimit] = useState<{ utilization?: number; status?: string; resetsAt?: number; rateLimitType?: string } | null>(null);
+  const [captainWorking, setCaptainWorking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession() || {};
   const userImage = (session?.user as any)?.image ?? null;
@@ -131,21 +132,50 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
       });
   }, [projectId]);
 
-  // Load on mount
+  // Check if captain is currently working (background session)
+  const checkCaptainStatus = useCallback(() => {
+    fetch(`/api/projects/${projectId}/agent`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: any) => {
+        if (data?.active) {
+          setCaptainWorking(true);
+        } else {
+          if (captainWorking) {
+            // Captain just finished — reload messages
+            loadHistory();
+          }
+          setCaptainWorking(false);
+        }
+      })
+      .catch(() => {});
+  }, [projectId, captainWorking, loadHistory]);
+
+  // Load on mount + check captain status
   useEffect(() => {
     loadHistory();
-  }, [loadHistory]);
+    checkCaptainStatus();
+  }, [loadHistory, checkCaptainStatus]);
 
-  // Reload when tab becomes visible (user switched away and came back)
+  // Poll captain status while working (every 3s)
+  useEffect(() => {
+    if (!captainWorking && !isLoading) return;
+    const interval = setInterval(() => {
+      checkCaptainStatus();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [captainWorking, isLoading, checkCaptainStatus]);
+
+  // Reload when tab becomes visible
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && !isLoading) {
+      if (document.visibilityState === 'visible') {
+        checkCaptainStatus();
         loadHistory();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [loadHistory, isLoading]);
+  }, [loadHistory, checkCaptainStatus]);
 
   // Auto-scroll
   useEffect(() => {
@@ -358,15 +388,20 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
               </div>
             )}
 
-            {/* Loading indicator (no content yet) */}
-            {isLoading && !streamingContent && streamingTools.length === 0 && (
+            {/* Loading indicator (no content yet) — active stream OR background captain */}
+            {((isLoading && !streamingContent && streamingTools.length === 0) || (captainWorking && !isLoading)) && (
               <div className="flex gap-3">
                 <ChatAvatar role="assistant" avatarUrl={captainAvatar} fallbackIcon="bot" />
                 <div className="rounded-lg px-4 py-3 bg-indigo-950/30 border border-indigo-500/10">
-                  <div className="flex gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    {captainWorking && !isLoading && (
+                      <span className="text-[11px] text-indigo-400 ml-1">Captain is working...</span>
+                    )}
                   </div>
                 </div>
               </div>

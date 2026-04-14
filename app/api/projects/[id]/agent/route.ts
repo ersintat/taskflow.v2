@@ -18,6 +18,9 @@ function getMcpServerPath(): string {
 // Track last known rate limit across requests
 let lastRateLimitInfo: { utilization?: number; resetsAt?: number; rateLimitType?: string; status?: string } | null = null;
 
+// Track which projects have an active captain session
+const activeProjects = new Map<string, { startedAt: number }>();
+
 // ─── Background Agent Runner ───
 // Runs Agent SDK query() independently of browser connection.
 // SSE stream pipes events while open; if browser disconnects, agent keeps running.
@@ -62,6 +65,7 @@ async function runAgentInBackground(
   };
 
   // Fire-and-forget: agent runs regardless of subscribers
+  activeProjects.set(projectId, { startedAt: Date.now() });
   (async () => {
     const workspacePath = path.join(process.cwd(), 'workspaces', projectId);
     if (!fs.existsSync(workspacePath)) {
@@ -279,6 +283,7 @@ async function runAgentInBackground(
       where: { projectId, createdAt: { lt: sevenDaysAgo } },
     }).catch((e: any) => console.error('[agent-route]', e.message));
 
+    activeProjects.delete(projectId);
     isComplete = true;
     emit({ type: 'done' });
     listeners.clear();
@@ -291,6 +296,7 @@ async function runAgentInBackground(
     await prisma.systemLog.create({
       data: { projectId, level: 'error', category: 'orchestrator', title: `Captain fatal error: ${err.message?.substring(0, 100)}`, details: err.stack?.substring(0, 500) },
     }).catch((e: any) => console.error('[agent-route]', e.message));
+    activeProjects.delete(projectId);
     isComplete = true;
     emit({ type: 'error', content: `Fatal: ${err.message}` });
     emit({ type: 'done' });
@@ -298,6 +304,19 @@ async function runAgentInBackground(
   });
 
   return { subscribe };
+}
+
+// GET /api/projects/:id/agent — check if captain is currently working
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const active = activeProjects.get(params.id);
+  if (active) {
+    const elapsed = Math.round((Date.now() - active.startedAt) / 1000);
+    return NextResponse.json({ active: true, elapsed });
+  }
+  return NextResponse.json({ active: false });
 }
 
 // POST /api/projects/:id/agent — Captain chat via Claude Agent SDK (subscription)
