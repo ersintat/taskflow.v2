@@ -274,13 +274,12 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
         setTimeout(retryLoad, 8000);
       }
     } catch (err: any) {
-      const msg = err.message || 'Connection error';
-      setError(msg.includes('fetch') || msg.includes('network') || msg.includes('Failed')
-        ? 'Connection lost. Captain may still be working in the background — refresh to check.'
-        : msg
-      );
-      // Retry loading from DB after error — agent may have completed in background
-      setTimeout(() => loadHistory(), 5000);
+      // Don't show error for connection timeout — captain works in background
+      // Just check status and load history silently
+      console.error('[chat] stream error:', err.message);
+      checkCaptainStatus();
+      setTimeout(() => loadHistory(), 2000);
+      setTimeout(() => loadHistory(), 6000);
     } finally {
       setIsLoading(false);
       setStreamingContent('');
