@@ -16,13 +16,14 @@ export async function GET(
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // Fetch last 200 messages (newest first), then reverse to chronological order
   const messages = await prisma.orchestratorChat.findMany({
     where: { projectId: params.id },
-    orderBy: { createdAt: 'asc' },
-    take: 100,
+    orderBy: { createdAt: 'desc' },
+    take: 200,
   });
 
-  return NextResponse.json(messages);
+  return NextResponse.json(messages.reverse());
 }
 
 // Build the system prompt with full project context
