@@ -11,6 +11,7 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  actorId?: string | null;
   toolCalls?: { tool: string; args: any }[];
   createdAt?: Date;
 }
@@ -34,20 +35,28 @@ function ChatAvatar({ role, avatarUrl, fallbackIcon }: { role: 'user' | 'assista
 }
 
 // Memoized message bubble — prevents re-rendering all messages on input change
-const ChatBubble = memo(function ChatBubble({ msg, formatTimestamp, userAvatarUrl, botAvatarUrl }: {
+const ChatBubble = memo(function ChatBubble({ msg, formatTimestamp, userAvatarUrl, botAvatarUrl, actorInfo }: {
   msg: ChatMessage;
   formatTimestamp: (d?: any) => string;
   userAvatarUrl?: string | null;
   botAvatarUrl?: string | null;
+  actorInfo?: { name: string; avatarUrl?: string; type: string } | null;
 }) {
+  // Determine avatar: actorInfo (from actorId) > default user/bot
+  const avatarUrl = actorInfo?.avatarUrl || (msg.role === 'user' ? userAvatarUrl : botAvatarUrl);
+  const isUser = msg.role === 'user' && (!actorInfo || actorInfo.type === 'HUMAN');
+
   return (
-    <div className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
       <ChatAvatar
         role={msg.role}
-        avatarUrl={msg.role === 'user' ? userAvatarUrl : botAvatarUrl}
-        fallbackIcon={msg.role === 'user' ? 'user' : 'bot'}
+        avatarUrl={avatarUrl}
+        fallbackIcon={isUser ? 'user' : 'bot'}
       />
-      <div className={`flex flex-col gap-1 max-w-[80%] min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+      <div className={`flex flex-col gap-1 max-w-[80%] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
+        {actorInfo && actorInfo.type === 'AGENT' && (
+          <span className="text-[10px] text-indigo-400 font-medium px-1">{actorInfo.name}</span>
+        )}
         <div className={`rounded-lg px-4 py-2 overflow-hidden ${msg.role === 'user' ? 'bg-zinc-800 text-slate-200' : 'bg-indigo-950/30 text-slate-300 border border-indigo-500/10'}`}>
           <div className="chat-markdown text-[13px] overflow-x-auto" style={{ fontFamily: '"SF Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace' }}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
@@ -82,19 +91,24 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [captainAvatar, setCaptainAvatar] = useState<string | null>(null);
+  const [actorMap, setActorMap] = useState<Record<string, { name: string; avatarUrl?: string; type: string }>>({});
   const [rateLimit, setRateLimit] = useState<{ utilization?: number; status?: string; resetsAt?: number; rateLimitType?: string } | null>(null);
   const [captainWorking, setCaptainWorking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession() || {};
   const userImage = (session?.user as any)?.image ?? null;
 
-  // Load captain avatar (Orchestrator actor)
+  // Load all actors (for avatar/name display in chat)
   useEffect(() => {
     fetch('/api/actors')
       .then(r => r.ok ? r.json() : [])
       .then((actors: any[]) => {
-        const orch = actors.find((a: any) => a.type === 'SYSTEM');
-        if (orch?.avatarUrl) setCaptainAvatar(orch.avatarUrl);
+        const map: Record<string, { name: string; avatarUrl?: string; type: string }> = {};
+        for (const a of actors) {
+          map[a.id] = { name: a.name, avatarUrl: a.avatarUrl, type: a.type };
+          if (a.type === 'SYSTEM' && a.avatarUrl) setCaptainAvatar(a.avatarUrl);
+        }
+        setActorMap(map);
       })
       .catch((e) => console.error('[orchestrator_chat]', e));
   }, []);
@@ -119,6 +133,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
             id: m.id || `h-${idx}`,
             role: m.role as 'user' | 'assistant',
             content: m.content,
+            actorId: m.actorId || m.actor_id || null,
             createdAt: new Date(m.createdAt),
           }));
         if (msgs.length > 0) {
@@ -361,7 +376,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
         ) : (
           <>
             {messages.map((msg) => (
-              <ChatBubble key={msg.id} msg={msg} formatTimestamp={formatTimestamp} userAvatarUrl={userImage} botAvatarUrl={captainAvatar} />
+              <ChatBubble key={msg.id} msg={msg} formatTimestamp={formatTimestamp} userAvatarUrl={userImage} botAvatarUrl={captainAvatar} actorInfo={msg.actorId ? actorMap[msg.actorId] : null} />
             ))}
 
             {/* Streaming content */}

@@ -278,6 +278,7 @@ async function runSubAgent(queueItemId: string): Promise<void> {
     headers: { 'Content-Type': 'application/json', 'x-internal-secret': captainSecret },
     body: JSON.stringify({
       projectId,
+      agentActorId: actor.id,
       message: `[AUTO] Sub-agent "${actor.name}" completed task "${qi.task.title}". Review the results and decide: approve or reject.`,
     }),
   }).catch((err) => console.error('[sub-agent] captain trigger failed:', err.message));

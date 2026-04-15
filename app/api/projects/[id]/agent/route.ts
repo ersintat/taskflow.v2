@@ -64,6 +64,9 @@ async function runAgentInBackground(
     return () => listeners.delete(listener);
   };
 
+  // Get captain actorId (declared outside async for catch scope)
+  let captainActorId: string | null = null;
+
   // Fire-and-forget: agent runs regardless of subscribers
   activeProjects.set(projectId, { startedAt: Date.now() });
   (async () => {
@@ -71,6 +74,9 @@ async function runAgentInBackground(
     if (!fs.existsSync(workspacePath)) {
       fs.mkdirSync(workspacePath, { recursive: true });
     }
+
+    const captainActor = await prisma.actor.findFirst({ where: { type: 'SYSTEM' }, select: { id: true } });
+    captainActorId = captainActor?.id || null;
 
     let systemPrompt = await buildOrchestratorPrompt(projectId, workspacePath);
 
@@ -232,7 +238,7 @@ async function runAgentInBackground(
 
       // Save error as assistant message
       await prisma.orchestratorChat.create({
-        data: { projectId, role: 'assistant', content: userMessage },
+        data: { projectId, role: 'assistant', actorId: captainActorId, content: userMessage },
       }).catch((e: any) => console.error('[agent-route]', e.message));
 
       // Log to system logs
@@ -252,7 +258,7 @@ async function runAgentInBackground(
     if (fullContent.trim()) {
       try {
         await prisma.orchestratorChat.create({
-          data: { projectId, role: 'assistant', content: fullContent },
+          data: { projectId, role: 'assistant', actorId: captainActorId, content: fullContent },
         });
         console.log(`[Save] Assistant message saved (${fullContent.length} chars)`);
       } catch (saveErr: any) {
@@ -260,7 +266,7 @@ async function runAgentInBackground(
         // Retry once
         try {
           await prisma.orchestratorChat.create({
-            data: { projectId, role: 'assistant', content: fullContent.substring(0, 50000) },
+            data: { projectId, role: 'assistant', actorId: captainActorId, content: fullContent.substring(0, 50000) },
           });
           console.log(`[Save] Retry succeeded (truncated to 50k)`);
         } catch (retryErr: any) {
@@ -270,7 +276,7 @@ async function runAgentInBackground(
     } else {
       // Agent produced no content — log this anomaly
       await prisma.orchestratorChat.create({
-        data: { projectId, role: 'assistant', content: '⚠️ Captain did not produce a response. This may be due to a rate limit, timeout, or connection issue. Please try again.' },
+        data: { projectId, role: 'assistant', actorId: captainActorId, content: '⚠️ Captain did not produce a response. This may be due to a rate limit, timeout, or connection issue. Please try again.' },
       }).catch((e: any) => console.error('[agent-route]', e.message));
       await prisma.systemLog.create({
         data: { projectId, level: 'error', category: 'orchestrator', title: 'Captain produced no response', details: `User message: "${userMessage.substring(0, 200)}"` },
@@ -291,7 +297,7 @@ async function runAgentInBackground(
     console.error('Background agent fatal error:', err);
     // Save error to DB so it's visible even if browser disconnected
     await prisma.orchestratorChat.create({
-      data: { projectId, role: 'assistant', content: `⚠️ Fatal error: ${err.message || 'Unknown error'}. Please try again.` },
+      data: { projectId, role: 'assistant', actorId: captainActorId, content: `⚠️ Fatal error: ${err.message || 'Unknown error'}. Please try again.` },
     }).catch((e: any) => console.error('[agent-route]', e.message));
     await prisma.systemLog.create({
       data: { projectId, level: 'error', category: 'orchestrator', title: `Captain fatal error: ${err.message?.substring(0, 100)}`, details: err.stack?.substring(0, 500) },
@@ -349,9 +355,21 @@ export async function POST(
 
   const projectId = params.id;
 
+  // Find user's actor ID (by email match)
+  const userEmail = session?.user?.email;
+  const userActor = userEmail ? await prisma.actor.findFirst({
+    where: { email: userEmail, type: 'HUMAN' },
+    select: { id: true },
+  }).catch(() => null) : null;
+  // Fallback: find by name
+  const userActorId = userActor?.id || (session?.user?.name ? (await prisma.actor.findFirst({
+    where: { name: session.user.name, type: 'HUMAN' },
+    select: { id: true },
+  }).catch(() => null))?.id : null) || null;
+
   // Save user message
   await prisma.orchestratorChat.create({
-    data: { projectId, role: 'user', content: userMessage.trim() },
+    data: { projectId, role: 'user', content: userMessage.trim(), actorId: userActorId },
   }).catch((e: any) => console.error('[agent-route]', e.message));
 
   // Start agent in background (runs independently of this SSE stream)

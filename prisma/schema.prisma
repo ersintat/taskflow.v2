@@ -335,6 +335,7 @@ model BridgeToken {
 model OrchestratorChat {
   id        String   @id @default(cuid())
   projectId String   @map("project_id")
+  actorId   String?  @map("actor_id") // Who sent: user actorId, kaptan actorId, agent actorId
   role      String   // user | assistant | system | tool_result
   content   String   @db.Text
   metadata  String?  @db.Text  // JSON - tool calls, mission refs, etc.

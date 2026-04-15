@@ -17,14 +17,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { projectId, message } = await req.json();
+  const { projectId, message, agentActorId } = await req.json();
   if (!projectId || !message) {
     return NextResponse.json({ error: 'projectId and message required' }, { status: 400 });
   }
 
-  // Save synthetic user message
+  // Save synthetic message from agent (not user)
   await prisma.orchestratorChat.create({
-    data: { projectId, role: 'user', content: message },
+    data: { projectId, role: 'user', content: message, actorId: agentActorId || null },
   });
 
   // Run captain in background (fire-and-forget)
@@ -40,6 +40,9 @@ async function runCaptainReview(projectId: string, triggerMessage: string): Prom
   if (!fs.existsSync(workspacePath)) {
     fs.mkdirSync(workspacePath, { recursive: true });
   }
+
+  const captainActor = await prisma.actor.findFirst({ where: { type: 'SYSTEM' }, select: { id: true } });
+  const captainActorId = captainActor?.id || null;
 
   const systemPrompt = await buildOrchestratorPrompt(projectId, workspacePath);
 
@@ -133,7 +136,7 @@ async function runCaptainReview(projectId: string, triggerMessage: string): Prom
   if (fullContent.trim()) {
     try {
       await prisma.orchestratorChat.create({
-        data: { projectId, role: 'assistant', content: fullContent },
+        data: { projectId, role: 'assistant', actorId: captainActorId, content: fullContent },
       });
       console.log(`[trigger-captain] Review saved (${fullContent.length} chars)`);
     } catch (e: any) {
@@ -141,7 +144,7 @@ async function runCaptainReview(projectId: string, triggerMessage: string): Prom
     }
   } else {
     await prisma.orchestratorChat.create({
-      data: { projectId, role: 'assistant', content: '⚠️ Auto-review produced no response.' },
+      data: { projectId, role: 'assistant', actorId: captainActorId, content: '⚠️ Auto-review produced no response.' },
     }).catch((e: any) => console.error('[trigger-captain]', e.message));
   }
 
