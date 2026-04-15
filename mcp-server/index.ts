@@ -1437,7 +1437,7 @@ server.tool(
     timeout: z.number().optional().describe("Timeout in seconds (default: 30, max: 300)"),
   },
   async (args) => {
-    const { execSync } = require("child_process");
+    const { execSync } = await import("child_process");
 
     // Safety: block dangerous patterns
     const dangerous = /rm\s+-rf\s+\/[^a-z]|mkfs|dd\s+if=|>\s*\/dev\/|shutdown|reboot|init\s+[06]|:(){ :|format\s+/i;
