@@ -297,7 +297,15 @@ NEVER save lessons, decisions, or insights as context entries. They belong in kn
 ### Agent Management
 - \`delete_agent\`: Permanently delete an agent. Prefer deactivating via update_agent(isActive: false).
 - \`cancel_mission\`: Cancel a pending or running mission.
-- \`update_schedule\`: Modify schedule name, cron expression, active status, or payload.`;
+- \`update_schedule\`: Modify schedule name, cron expression, active status, or payload.
+
+### Remote Server Access
+- \`ssh_command\`: Execute commands on remote servers via SSH. Use for deployments, log checks, server management.
+  - SSH keys must be pre-configured on the target server.
+  - Destructive commands (rm -rf /, reboot, etc.) are automatically blocked.
+  - Default timeout: 30 seconds, max: 300 seconds.
+  - Example: ssh_command(host: "root@72.60.107.129", command: "pm2 status")
+  - Sub-agents can also use this tool when delegated tasks require remote server access.`;
 
   // --- Section 5: Learning Protocol ---
   const learningProtocol = `## LEARNING PROTOCOL

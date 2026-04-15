@@ -1426,6 +1426,63 @@ server.tool(
 );
 
 // ════════════════════════════════════════════════════════
+// 35. ssh_command
+// ════════════════════════════════════════════════════════
+server.tool(
+  "ssh_command",
+  "Execute a command on a remote server via SSH. Use for server management, deployments, log checks, and remote operations. The SSH key must be configured on the server beforehand.",
+  {
+    host: z.string().describe('SSH target (e.g. "root@72.60.107.129" or "deploy@myserver.com")'),
+    command: z.string().describe('The command to execute on the remote server'),
+    timeout: z.number().optional().describe("Timeout in seconds (default: 30, max: 300)"),
+  },
+  async (args) => {
+    const { execSync } = require("child_process");
+
+    // Safety: block dangerous patterns
+    const dangerous = /rm\s+-rf\s+\/[^a-z]|mkfs|dd\s+if=|>\s*\/dev\/|shutdown|reboot|init\s+[06]|:(){ :|format\s+/i;
+    if (dangerous.test(args.command)) {
+      await logEvent(PROJECT_ID, "sub_agent", `SSH BLOCKED dangerous command: ${args.command}`, `Host: ${args.host}`, "error");
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Command blocked — potentially destructive operation. Ask the user for explicit approval." }) }] };
+    }
+
+    const timeoutSec = Math.min(args.timeout || 30, 300);
+
+    try {
+      await logEvent(PROJECT_ID, "sub_agent", `SSH executing on ${args.host}`, args.command.substring(0, 200), "action");
+
+      const output = execSync(
+        `ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new ${args.host} ${JSON.stringify(args.command)}`,
+        { encoding: "utf-8", timeout: timeoutSec * 1000, maxBuffer: 1024 * 1024 }
+      );
+
+      await logEvent(PROJECT_ID, "sub_agent", `SSH completed on ${args.host}`, `Output: ${(output || "").substring(0, 300)}`, "action");
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({
+        success: true,
+        host: args.host,
+        command: args.command,
+        output: (output || "").trim(),
+      }) }] };
+    } catch (e: any) {
+      const stderr = e.stderr?.toString() || "";
+      const stdout = e.stdout?.toString() || "";
+      const msg = e.killed ? `Command timed out (${timeoutSec}s)` : (stderr || e.message);
+
+      await logEvent(PROJECT_ID, "sub_agent", `SSH failed on ${args.host}`, msg.substring(0, 300), "error");
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({
+        success: false,
+        host: args.host,
+        command: args.command,
+        error: msg.substring(0, 500),
+        stdout: stdout.substring(0, 500),
+      }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
 // Start Server
 // ════════════════════════════════════════════════════════
 async function main() {
