@@ -14,6 +14,7 @@ export const metadata = {
   metadataBase: new URL(process.env.NEXTAUTH_URL || 'http://localhost:3000'),
   icons: { icon: '/favicon.svg', shortcut: '/favicon.svg' },
   openGraph: { images: ['/og-image.png'] },
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
