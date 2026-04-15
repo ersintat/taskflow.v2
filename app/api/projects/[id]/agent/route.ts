@@ -135,7 +135,7 @@ async function runAgentInBackground(
               },
             },
           },
-          allowedTools: ['mcp__taskflow-tools__*', 'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
+          allowedTools: ['mcp__taskflow-tools__*', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
           maxTurns: 100,
           permissionMode: 'acceptEdits',
         },

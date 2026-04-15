@@ -1079,6 +1079,353 @@ server.tool(
 );
 
 // ════════════════════════════════════════════════════════
+// 23. delete_knowledge
+// ════════════════════════════════════════════════════════
+server.tool(
+  "delete_knowledge",
+  "Delete a knowledge base entry by ID. Use when information is outdated, incorrect, or duplicated.",
+  {
+    knowledgeId: z.string().describe("The knowledge entry ID to delete"),
+  },
+  async (args) => {
+    try {
+      const entry = await prisma.knowledgeBase.findUnique({ where: { id: args.knowledgeId }, select: { title: true, projectId: true } });
+      if (!entry) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Knowledge entry not found" }) }] };
+      if (entry.projectId !== PROJECT_ID) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Knowledge entry belongs to a different project" }) }] };
+
+      await prisma.knowledgeBase.delete({ where: { id: args.knowledgeId } });
+      await logEvent(PROJECT_ID, "orchestrator", `Knowledge deleted: ${entry.title}`, undefined, "action");
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, message: `Knowledge entry "${entry.title}" deleted` }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
+// 24. update_knowledge
+// ════════════════════════════════════════════════════════
+server.tool(
+  "update_knowledge",
+  "Update an existing knowledge base entry. Use to correct, expand, or reclassify information.",
+  {
+    knowledgeId: z.string().describe("The knowledge entry ID to update"),
+    title: z.string().optional().describe("Updated title"),
+    content: z.string().optional().describe("Updated content (markdown)"),
+    type: z.enum(["lesson_learned", "decision_rationale", "technical_note", "process_note", "reference", "faq"]).optional().describe("Updated type"),
+    tags: z.string().optional().describe("Updated comma-separated tags"),
+  },
+  async (args) => {
+    try {
+      const entry = await prisma.knowledgeBase.findUnique({ where: { id: args.knowledgeId }, select: { title: true, projectId: true } });
+      if (!entry) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Knowledge entry not found" }) }] };
+      if (entry.projectId !== PROJECT_ID) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Knowledge entry belongs to a different project" }) }] };
+
+      const data: any = {};
+      if (args.title) data.title = args.title;
+      if (args.content) data.content = args.content;
+      if (args.type) data.type = args.type;
+      if (args.tags !== undefined) data.tags = JSON.stringify(args.tags.split(",").map((t: string) => t.trim()).filter(Boolean));
+
+      const updated = await prisma.knowledgeBase.update({ where: { id: args.knowledgeId }, data });
+      await logEvent(PROJECT_ID, "orchestrator", `Knowledge updated: ${updated.title}`, `Fields: ${Object.keys(data).join(", ")}`, "action");
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, id: updated.id, title: updated.title, message: `Knowledge entry "${updated.title}" updated` }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
+// 25. list_comments
+// ════════════════════════════════════════════════════════
+server.tool(
+  "list_comments",
+  "List all comments on a task. Use to review discussion, agent reports, and feedback.",
+  {
+    taskId: z.string().describe("The task ID to get comments for"),
+  },
+  async (args) => {
+    try {
+      const comments = await prisma.comment.findMany({
+        where: { taskId: args.taskId },
+        include: { actor: { select: { id: true, name: true, type: true } } },
+        orderBy: { createdAt: "asc" },
+      });
+
+      const task = await prisma.task.findUnique({ where: { id: args.taskId }, select: { title: true } });
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({
+        success: true, taskTitle: task?.title, count: comments.length,
+        comments: comments.map(c => ({ id: c.id, actor: c.actor.name, actorType: c.actor.type, content: c.content, createdAt: c.createdAt })),
+      }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
+// 26. delete_comment
+// ════════════════════════════════════════════════════════
+server.tool(
+  "delete_comment",
+  "Delete a comment from a task by comment ID.",
+  {
+    commentId: z.string().describe("The comment ID to delete"),
+  },
+  async (args) => {
+    try {
+      const comment = await prisma.comment.findUnique({ where: { id: args.commentId }, include: { task: { select: { title: true } } } });
+      if (!comment) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Comment not found" }) }] };
+
+      await prisma.comment.delete({ where: { id: args.commentId } });
+      await logEvent(PROJECT_ID, "orchestrator", `Comment deleted from: ${comment.task.title}`, comment.content.substring(0, 100), "action");
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, message: `Comment deleted from "${comment.task.title}"` }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
+// 27. get_task
+// ════════════════════════════════════════════════════════
+server.tool(
+  "get_task",
+  "Get full details of a single task including assignments, subtasks, comments, and activity.",
+  {
+    taskId: z.string().describe("The task ID to retrieve"),
+  },
+  async (args) => {
+    try {
+      const task = await prisma.task.findUnique({
+        where: { id: args.taskId },
+        include: {
+          category: { select: { id: true, name: true } },
+          assignments: { include: { actor: { select: { id: true, name: true, type: true } } } },
+          subtasks: { orderBy: { order: "asc" } },
+          comments: { include: { actor: { select: { id: true, name: true, type: true } } }, orderBy: { createdAt: "asc" }, take: 20 },
+          decisions: { include: { actor: { select: { id: true, name: true } } }, orderBy: { createdAt: "desc" }, take: 5 },
+          activities: { orderBy: { createdAt: "desc" }, take: 10 },
+        },
+      });
+
+      if (!task) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Task not found" }) }] };
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, task }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
+// 28. list_context
+// ════════════════════════════════════════════════════════
+server.tool(
+  "list_context",
+  "List all project context entries. Use to see what context values are stored.",
+  {},
+  async () => {
+    try {
+      const contexts = await prisma.projectContext.findMany({
+        where: { projectId: PROJECT_ID },
+        orderBy: [{ key: "asc" }, { version: "desc" }],
+      });
+
+      // Group by key — show latest version only
+      const latest = new Map<string, any>();
+      for (const ctx of contexts) {
+        if (!latest.has(ctx.key)) latest.set(ctx.key, ctx);
+      }
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({
+        success: true, count: latest.size,
+        contexts: Array.from(latest.values()).map(c => ({ id: c.id, key: c.key, value: c.value.substring(0, 500), version: c.version, createdAt: c.createdAt })),
+      }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
+// 29. update_subtask
+// ════════════════════════════════════════════════════════
+server.tool(
+  "update_subtask",
+  "Update a subtask — mark as completed/uncompleted or change title.",
+  {
+    subtaskId: z.string().describe("The subtask ID to update"),
+    completed: z.boolean().optional().describe("Mark completed (true) or uncompleted (false)"),
+    title: z.string().optional().describe("Updated subtask title"),
+  },
+  async (args) => {
+    try {
+      const subtask = await prisma.subtask.findUnique({ where: { id: args.subtaskId }, include: { task: { select: { title: true } } } });
+      if (!subtask) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Subtask not found" }) }] };
+
+      const data: any = {};
+      if (args.completed !== undefined) data.completed = args.completed;
+      if (args.title) data.title = args.title;
+
+      const updated = await prisma.subtask.update({ where: { id: args.subtaskId }, data });
+      await logEvent(PROJECT_ID, "orchestrator", `Subtask updated: ${updated.title} (${updated.completed ? "completed" : "uncompleted"})`, `Task: ${subtask.task.title}`, "action");
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, subtaskId: updated.id, title: updated.title, completed: updated.completed, message: `Subtask "${updated.title}" ${updated.completed ? "completed" : "uncompleted"}` }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
+// 30. delete_subtask
+// ════════════════════════════════════════════════════════
+server.tool(
+  "delete_subtask",
+  "Delete a subtask from a task.",
+  {
+    subtaskId: z.string().describe("The subtask ID to delete"),
+  },
+  async (args) => {
+    try {
+      const subtask = await prisma.subtask.findUnique({ where: { id: args.subtaskId }, include: { task: { select: { title: true } } } });
+      if (!subtask) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Subtask not found" }) }] };
+
+      await prisma.subtask.delete({ where: { id: args.subtaskId } });
+      await logEvent(PROJECT_ID, "orchestrator", `Subtask deleted: ${subtask.title}`, `Task: ${subtask.task.title}`, "action");
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, message: `Subtask "${subtask.title}" deleted from "${subtask.task.title}"` }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
+// 31. update_schedule
+// ════════════════════════════════════════════════════════
+server.tool(
+  "update_schedule",
+  "Update an existing schedule — change cron expression, name, active status, or payload.",
+  {
+    scheduleId: z.string().describe("The schedule ID to update"),
+    name: z.string().optional().describe("Updated schedule name"),
+    cron: z.string().optional().describe("Updated cron expression"),
+    isActive: z.boolean().optional().describe("Enable (true) or disable (false) the schedule"),
+    payload: z.string().optional().describe("Updated JSON payload"),
+    description: z.string().optional().describe("Updated description"),
+  },
+  async (args) => {
+    try {
+      const schedule = await prisma.schedule.findUnique({ where: { id: args.scheduleId }, select: { name: true, projectId: true } });
+      if (!schedule) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Schedule not found" }) }] };
+      if (schedule.projectId !== PROJECT_ID) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Schedule belongs to a different project" }) }] };
+
+      const data: any = {};
+      if (args.name) data.name = args.name;
+      if (args.cron) data.cron = args.cron;
+      if (args.isActive !== undefined) data.isActive = args.isActive;
+      if (args.payload) data.payload = args.payload;
+      if (args.description !== undefined) data.description = args.description;
+
+      const updated = await prisma.schedule.update({ where: { id: args.scheduleId }, data });
+      await logEvent(PROJECT_ID, "orchestrator", `Schedule updated: ${updated.name}`, `Fields: ${Object.keys(data).join(", ")}`, "action");
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, id: updated.id, name: updated.name, isActive: updated.isActive, message: `Schedule "${updated.name}" updated` }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
+// 32. unassign_task
+// ════════════════════════════════════════════════════════
+server.tool(
+  "unassign_task",
+  "Remove an actor's assignment from a task.",
+  {
+    taskId: z.string().describe("The task ID"),
+    actorId: z.string().describe("The actor ID to unassign"),
+  },
+  async (args) => {
+    try {
+      const assignment = await prisma.taskAssignment.findFirst({ where: { taskId: args.taskId, actorId: args.actorId } });
+      if (!assignment) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Assignment not found" }) }] };
+
+      await prisma.taskAssignment.delete({ where: { id: assignment.id } });
+
+      const task = await prisma.task.findUnique({ where: { id: args.taskId }, select: { title: true } });
+      const actor = await prisma.actor.findUnique({ where: { id: args.actorId }, select: { name: true } });
+      await logEvent(PROJECT_ID, "orchestrator", `Unassigned "${actor?.name}" from "${task?.title}"`, undefined, "action");
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, message: `"${actor?.name}" unassigned from "${task?.title}"` }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
+// 33. delete_agent
+// ════════════════════════════════════════════════════════
+server.tool(
+  "delete_agent",
+  "Delete an agent (Actor) permanently. Use with caution — prefer deactivating via update_agent instead.",
+  {
+    agentId: z.string().describe("The agent ID to delete"),
+  },
+  async (args) => {
+    try {
+      const agent = await prisma.actor.findUnique({ where: { id: args.agentId }, select: { name: true, type: true } });
+      if (!agent) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Agent not found" }) }] };
+      if (agent.type === "SYSTEM") return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Cannot delete SYSTEM actor" }) }] };
+
+      await prisma.actor.delete({ where: { id: args.agentId } });
+      await logEvent(PROJECT_ID, "orchestrator", `Agent deleted: ${agent.name}`, undefined, "action");
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, message: `Agent "${agent.name}" deleted` }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
+// 34. cancel_mission
+// ════════════════════════════════════════════════════════
+server.tool(
+  "cancel_mission",
+  "Cancel a pending or running mission.",
+  {
+    missionId: z.string().describe("The mission ID to cancel"),
+  },
+  async (args) => {
+    try {
+      const mission = await prisma.agentMission.findUnique({ where: { id: args.missionId }, select: { title: true, status: true, projectId: true } });
+      if (!mission) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Mission not found" }) }] };
+      if (mission.projectId !== PROJECT_ID) return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Mission belongs to a different project" }) }] };
+      if (mission.status === "completed" || mission.status === "cancelled") {
+        return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: `Mission is already ${mission.status}` }) }] };
+      }
+
+      await prisma.agentMission.update({ where: { id: args.missionId }, data: { status: "cancelled" } });
+      await logEvent(PROJECT_ID, "orchestrator", `Mission cancelled: ${mission.title}`, `Previous status: ${mission.status}`, "action");
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, message: `Mission "${mission.title}" cancelled` }) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: e.message }) }] };
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════
 // Start Server
 // ════════════════════════════════════════════════════════
 async function main() {
