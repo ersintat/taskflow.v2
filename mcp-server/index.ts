@@ -739,20 +739,21 @@ server.tool(
       const where: any = { projectId: PROJECT_ID };
       if (args.type && args.type !== "all") where.type = args.type;
 
-      let entries = await prisma.knowledgeBase.findMany({
-        where,
-        select: { id: true, title: true, content: true, type: true, tags: true },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-      });
-
+      // Search at DB level — query filters BEFORE limiting results
       if (args.query) {
-        const q = args.query.toLowerCase();
-        entries = entries.filter((e: any) =>
-          e.title.toLowerCase().includes(q) ||
-          e.content.toLowerCase().includes(q)
-        );
+        where.OR = [
+          { title: { contains: args.query, mode: "insensitive" } },
+          { content: { contains: args.query, mode: "insensitive" } },
+          { tags: { contains: args.query, mode: "insensitive" } },
+        ];
       }
+
+      const entries = await prisma.knowledgeBase.findMany({
+        where,
+        select: { id: true, title: true, content: true, type: true, tags: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      });
 
       return {
         content: [{ type: "text" as const, text: JSON.stringify({
@@ -760,6 +761,7 @@ server.tool(
           data: entries.map((e: any) => ({
             id: e.id, title: e.title, type: e.type, tags: e.tags,
             content: e.content.substring(0, 500),
+            createdAt: e.createdAt,
           })),
           message: `Found ${entries.length} knowledge entry(s)`,
         }) }],
