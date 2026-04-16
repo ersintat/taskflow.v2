@@ -1123,6 +1123,9 @@ server.tool(
     content: z.string().optional().describe("Updated content (markdown)"),
     type: z.enum(["lesson_learned", "decision_rationale", "technical_note", "process_note", "reference", "faq"]).optional().describe("Updated type"),
     tags: z.string().optional().describe("Updated comma-separated tags"),
+    priority: z.enum(["critical", "high", "normal", "low"]).optional().describe("Priority level"),
+    category: z.string().optional().describe("Category for grouping (e.g. store-cards, decisions, infrastructure)"),
+    pinned: z.boolean().optional().describe("Pin to always show at top"),
   },
   async (args) => {
     try {
@@ -1135,6 +1138,9 @@ server.tool(
       if (args.content) data.content = args.content;
       if (args.type) data.type = args.type;
       if (args.tags !== undefined) data.tags = JSON.stringify(args.tags.split(",").map((t: string) => t.trim()).filter(Boolean));
+      if (args.priority) data.priority = args.priority;
+      if (args.category !== undefined) data.category = args.category || null;
+      if (args.pinned !== undefined) data.pinned = args.pinned;
 
       const updated = await prisma.knowledgeBase.update({ where: { id: args.knowledgeId }, data });
       await logEvent(PROJECT_ID, "orchestrator", `Knowledge updated: ${updated.title}`, `Fields: ${Object.keys(data).join(", ")}`, "action");
