@@ -161,7 +161,7 @@ async function runSubAgent(queueItemId: string): Promise<void> {
       if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set — cannot fallback to API');
       options.env = { ANTHROPIC_API_KEY: apiKey };
       options.agents = {
-        'sub-agent': { ...agentOptions.agents['sub-agent'], model: 'opus', effort: 'max' },
+        'sub-agent': { ...agentOptions.agents['sub-agent'], model: 'sonnet', effort: 'high' },
       };
       console.log(`[sub-agent] Fallback to API key (Opus) for "${actor.name}"`);
     }
