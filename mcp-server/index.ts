@@ -1465,12 +1465,15 @@ server.tool(
     try {
       await logEvent(PROJECT_ID, "sub_agent", `SSH executing on ${args.host}`, args.command.substring(0, 200), "action");
 
-      // Use base64 encoding to safely pass complex commands (Windows paths, quotes, pipes, redirects)
-      const cmdBase64 = Buffer.from(args.command).toString("base64");
-      // Try bash first (Linux), fall back to PowerShell decoding (Windows)
-      const wrappedCmd = `bash -c 'echo ${cmdBase64} | base64 -d | bash' 2>/dev/null || powershell -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${cmdBase64}')) | Invoke-Expression"`;
+      // Pass command directly — simple and reliable for both Linux and Windows
+      // Single quotes around the command prevent local shell interpretation
+      // For commands with single quotes inside, use double-quote wrapping
+      const hasSingleQuote = args.command.includes("'");
+      const sshCmd = hasSingleQuote
+        ? `ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new ${args.host} ${JSON.stringify(args.command)}`
+        : `ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new ${args.host} '${args.command}'`;
       const output = execSync(
-        `ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new ${args.host} ${JSON.stringify(wrappedCmd)}`,
+        sshCmd,
         { encoding: "utf-8", timeout: timeoutSec * 1000, maxBuffer: 5 * 1024 * 1024 }
       );
 
