@@ -38,7 +38,10 @@ export async function triggerSubAgentWorker(queueItemId: string): Promise<void> 
     console.error(`Sub-agent failed for ${queueItemId}:`, msg);
 
     try {
-      const item = await prisma.agentQueue.findUnique({ where: { id: queueItemId } });
+      const item = await prisma.agentQueue.findUnique({
+        where: { id: queueItemId },
+        include: { task: { select: { title: true, projectId: true } } },
+      });
       if (item) {
         await prisma.agentQueue.update({
           where: { id: queueItemId },
@@ -47,6 +50,32 @@ export async function triggerSubAgentWorker(queueItemId: string): Promise<void> 
         await prisma.task.update({ where: { id: item.taskId }, data: { status: 'blocked' } });
         await syncTaskCategory(item.taskId, 'blocked');
         await logEvent(item.taskId, `Sub-agent failed: ${msg}`, undefined, 'error');
+
+        // Notify project owner about failure
+        const project = await prisma.project.findUnique({ where: { id: item.task.projectId }, select: { ownerId: true } });
+        if (project?.ownerId) {
+          await prisma.notification.create({
+            data: {
+              userId: project.ownerId,
+              title: `Sub-agent failed: ${item.task.title}`,
+              message: `Task "${item.task.title}" failed: ${msg.substring(0, 200)}`,
+              type: 'error',
+              link: `/projects/${item.task.projectId}`,
+            },
+          }).catch((e: any) => console.error('[sub-agent-worker] fail notification:', e.message));
+        }
+
+        // Auto-trigger captain to handle the failure
+        const captainBaseUrl = process.env.NEXTAUTH_URL || process.env.BASE_URL || 'http://localhost:3000';
+        const captainSecret = process.env.INTERNAL_SECRET || 'taskflow-internal-2026';
+        fetch(`${captainBaseUrl}/api/internal/trigger-captain`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-internal-secret': captainSecret },
+          body: JSON.stringify({
+            projectId: item.task.projectId,
+            message: `[AUTO] Sub-agent FAILED on task "${item.task.title}". Error: ${msg.substring(0, 300)}. Investigate and decide next steps.`,
+          }),
+        }).catch((err) => console.error('[sub-agent] captain trigger (fail) failed:', err.message));
       }
     } catch (recoveryErr: any) {
       console.error(`[CRITICAL] Sub-agent recovery failed for ${queueItemId}:`, recoveryErr.message);
