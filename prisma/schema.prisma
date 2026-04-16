@@ -251,6 +251,9 @@ model KnowledgeBase {
   content   String   @db.Text
   type      String   // LESSON_LEARNED | DECISION_RATIONALE | TECHNICAL_NOTE | PROCESS_NOTE | REFERENCE | FAQ
   tags      String   @default("[]") // JSON array stored as string
+  priority  String   @default("normal") // critical | high | normal | low
+  category  String?  // store-cards | decisions | processes | infrastructure | credentials
+  pinned    Boolean  @default(false) // Always show at top of knowledge base
   createdBy String?  @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

@@ -49,8 +49,8 @@ export async function getProjectSnapshot(projectId: string): Promise<ProjectSnap
     }),
     prisma.knowledgeBase.findMany({
       where: { projectId },
-      select: { id: true, title: true, content: true, type: true },
-      orderBy: { createdAt: 'desc' },
+      select: { id: true, title: true, content: true, type: true, priority: true, category: true, pinned: true },
+      orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
       take: 100,
     }),
     prisma.actor.findMany({
@@ -142,14 +142,14 @@ export async function getProjectSnapshot(projectId: string): Promise<ProjectSnap
     knowledgeSummary = 'No knowledge entries yet.';
   } else {
     const criticalTypes = ['reference', 'process_note'];
-    const criticalEntries = knowledge.filter(k => criticalTypes.includes(k.type));
-    const otherEntries = knowledge.filter(k => !criticalTypes.includes(k.type));
+    const criticalEntries = knowledge.filter((k: any) => k.pinned || k.priority === 'critical' || criticalTypes.includes(k.type));
+    const otherEntries = knowledge.filter((k: any) => !k.pinned && k.priority !== 'critical' && !criticalTypes.includes(k.type));
 
     const criticalLines = criticalEntries.map(
-      k => `### [${k.type}] ${k.title} {id: ${k.id}}\n${k.content}`
+      (k: any) => `### ${k.pinned ? '📌 ' : ''}[${k.type}] ${k.title}${k.category ? ` (${k.category})` : ''} {id: ${k.id}}\n${k.content}`
     );
     const otherLines = otherEntries.map(
-      k => `- [${k.type}] ${k.title}: ${k.content?.substring(0, 200)} {id: ${k.id}}`
+      (k: any) => `- [${k.type}] ${k.title}: ${k.content?.substring(0, 200)} {id: ${k.id}}`
     );
 
     const parts: string[] = [];

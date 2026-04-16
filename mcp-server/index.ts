@@ -249,6 +249,9 @@ server.tool(
     content: z.string().describe("Knowledge content (markdown)"),
     type: z.enum(["lesson_learned", "decision_rationale", "technical_note", "process_note", "reference", "faq"]).describe("Entry type"),
     tags: z.string().optional().describe("Comma-separated tags"),
+    priority: z.enum(["critical", "high", "normal", "low"]).optional().describe("Priority level (default: normal). Use critical for credentials, server info, master strategy cards"),
+    category: z.string().optional().describe("Category for grouping (e.g. store-cards, decisions, processes, infrastructure, credentials)"),
+    pinned: z.boolean().optional().describe("Pin to always show at top of knowledge base"),
   },
   async (args) => {
     try {
@@ -260,6 +263,9 @@ server.tool(
           content: args.content,
           type: args.type,
           tags: JSON.stringify(tagArray),
+          priority: args.priority || "normal",
+          category: args.category || null,
+          pinned: args.pinned || false,
           createdBy: "orchestrator",
         },
       });
@@ -750,7 +756,7 @@ server.tool(
 
       const entries = await prisma.knowledgeBase.findMany({
         where,
-        select: { id: true, title: true, content: true, type: true, tags: true, createdAt: true },
+        select: { id: true, title: true, content: true, type: true, tags: true, priority: true, category: true, pinned: true, createdAt: true },
         orderBy: { createdAt: "desc" },
         take: 50,
       });
@@ -1435,27 +1441,31 @@ server.tool(
   "Execute a command on a remote server via SSH. Use for server management, deployments, log checks, and remote operations. The SSH key must be configured on the server beforehand.",
   {
     host: z.string().describe('SSH target (e.g. "root@72.60.107.129" or "deploy@myserver.com")'),
-    command: z.string().describe('The command to execute on the remote server'),
-    timeout: z.number().optional().describe("Timeout in seconds (default: 30, max: 300)"),
+    command: z.string().describe('The command to execute on the remote server. Supports complex commands, pipes, redirects, Windows paths, and multi-line scripts.'),
+    timeout: z.number().optional().describe("Timeout in seconds (default: 30, max: 1800)"),
   },
   async (args) => {
     const { execSync } = await import("child_process");
 
     // Safety: block dangerous patterns
-    const dangerous = /rm\s+-rf\s+\/[^a-z]|mkfs|dd\s+if=|>\s*\/dev\/|shutdown|reboot|init\s+[06]|:(){ :|format\s+/i;
+    const dangerous = /rm\s+-rf\s+\/[^a-z]|mkfs|dd\s+if=|>\s*\/dev\/|shutdown|reboot|init\s+[06]|:(){ :|format\s+c:/i;
     if (dangerous.test(args.command)) {
       await logEvent(PROJECT_ID, "sub_agent", `SSH BLOCKED dangerous command: ${args.command}`, `Host: ${args.host}`, "error");
       return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: "Command blocked — potentially destructive operation. Ask the user for explicit approval." }) }] };
     }
 
-    const timeoutSec = Math.min(args.timeout || 30, 300);
+    const timeoutSec = Math.min(args.timeout || 30, 1800);
 
     try {
       await logEvent(PROJECT_ID, "sub_agent", `SSH executing on ${args.host}`, args.command.substring(0, 200), "action");
 
+      // Use base64 encoding to safely pass complex commands (Windows paths, quotes, pipes, redirects)
+      const cmdBase64 = Buffer.from(args.command).toString("base64");
+      // Try bash first (Linux), fall back to PowerShell decoding (Windows)
+      const wrappedCmd = `bash -c 'echo ${cmdBase64} | base64 -d | bash' 2>/dev/null || powershell -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${cmdBase64}')) | Invoke-Expression"`;
       const output = execSync(
-        `ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new ${args.host} ${JSON.stringify(args.command)}`,
-        { encoding: "utf-8", timeout: timeoutSec * 1000, maxBuffer: 1024 * 1024 }
+        `ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new ${args.host} ${JSON.stringify(wrappedCmd)}`,
+        { encoding: "utf-8", timeout: timeoutSec * 1000, maxBuffer: 5 * 1024 * 1024 }
       );
 
       await logEvent(PROJECT_ID, "sub_agent", `SSH completed on ${args.host}`, `Output: ${(output || "").substring(0, 300)}`, "action");

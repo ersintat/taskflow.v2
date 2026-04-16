@@ -29,7 +29,7 @@ export async function triggerSubAgentWorker(queueItemId: string): Promise<void> 
 
   activeWorkers++;
   const abortController = new AbortController();
-  const timeout = setTimeout(() => abortController.abort(), 10 * 60 * 1000); // 10 min
+  const timeout = setTimeout(() => abortController.abort(), 30 * 60 * 1000); // 30 min
 
   try {
     await runSubAgent(queueItemId);
@@ -167,7 +167,7 @@ async function runSubAgent(queueItemId: string): Promise<void> {
         prompt: systemPrompt,
         model: 'sonnet' as string,
         effort: 'high' as const,
-        maxTurns: 30,
+        maxTurns: 50,
       },
     },
     cwd: workspacePath,
