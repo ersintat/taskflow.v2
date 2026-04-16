@@ -49,9 +49,9 @@ export async function getProjectSnapshot(projectId: string): Promise<ProjectSnap
     }),
     prisma.knowledgeBase.findMany({
       where: { projectId },
-      select: { title: true, content: true, type: true },
+      select: { id: true, title: true, content: true, type: true },
       orderBy: { createdAt: 'desc' },
-      take: 15,
+      take: 100,
     }),
     prisma.actor.findMany({
       where: { isActive: true, type: { in: ['AGENT', 'SYSTEM'] } },
@@ -135,14 +135,31 @@ export async function getProjectSnapshot(projectId: string): Promise<ProjectSnap
   }
 
   // --- Format knowledge summary ---
+  // Critical types (reference, process_note) get full content so captain always has credentials, server info, procedures.
+  // Other types get title + preview to save tokens.
   let knowledgeSummary: string;
   if (knowledge.length === 0) {
     knowledgeSummary = 'No knowledge entries yet.';
   } else {
-    const knowledgeLines = knowledge.map(
-      k => `- [${k.type}] ${k.title}: ${k.content?.substring(0, 150)}`
+    const criticalTypes = ['reference', 'process_note'];
+    const criticalEntries = knowledge.filter(k => criticalTypes.includes(k.type));
+    const otherEntries = knowledge.filter(k => !criticalTypes.includes(k.type));
+
+    const criticalLines = criticalEntries.map(
+      k => `### [${k.type}] ${k.title} {id: ${k.id}}\n${k.content}`
     );
-    knowledgeSummary = knowledgeLines.join('\n');
+    const otherLines = otherEntries.map(
+      k => `- [${k.type}] ${k.title}: ${k.content?.substring(0, 200)} {id: ${k.id}}`
+    );
+
+    const parts: string[] = [];
+    if (criticalLines.length > 0) {
+      parts.push(`**Critical Reference & Process Notes (${criticalLines.length}):**\n${criticalLines.join('\n\n')}`);
+    }
+    if (otherLines.length > 0) {
+      parts.push(`**Other Knowledge (${otherLines.length}):**\n${otherLines.join('\n')}`);
+    }
+    knowledgeSummary = `Total: ${knowledge.length} entries\n\n${parts.join('\n\n')}`;
   }
 
   // --- Format agent summary ---

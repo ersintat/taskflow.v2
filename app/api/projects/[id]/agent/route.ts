@@ -284,9 +284,9 @@ async function runAgentInBackground(
     }
 
     // Retention: clean old messages
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     await prisma.orchestratorChat.deleteMany({
-      where: { projectId, createdAt: { lt: sevenDaysAgo } },
+      where: { projectId, createdAt: { lt: thirtyDaysAgo } },
     }).catch((e: any) => console.error('[agent-route]', e.message));
 
     activeProjects.delete(projectId);
