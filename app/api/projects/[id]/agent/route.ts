@@ -21,7 +21,8 @@ let lastRateLimitInfo: { utilization?: number; resetsAt?: number; rateLimitType?
 // Track which projects have an active captain session
 // lastActivity updates on every event — used for stale detection (no events for 2 min = stale)
 const activeProjects = new Map<string, { startedAt: number; lastActivity: number }>();
-const STALE_TIMEOUT = 10 * 60_000; // 10 minutes of no activity = stale (SSH/tool calls can take minutes)
+// Session cleared ONLY by: stream completion, error catch, or absolute max time
+// No idle-based stale detection — Agent SDK produces no events during long tool calls
 const MAX_SESSION_TIME = 45 * 60_000; // 45 minutes absolute max
 
 // ─── Background Agent Runner ───
@@ -370,13 +371,11 @@ export async function GET(
   if (active) {
     const now = Date.now();
     const elapsed = Math.round((now - active.startedAt) / 1000);
-    const idle = now - active.lastActivity;
 
-    // Stale: no events for 2 min OR absolute max 30 min
-    if (idle > STALE_TIMEOUT || (now - active.startedAt) > MAX_SESSION_TIME) {
+    // Only absolute max timeout clears from GET — agent SDK handles its own completion
+    if ((now - active.startedAt) > MAX_SESSION_TIME) {
       activeProjects.delete(params.id);
-      const reason = idle > STALE_TIMEOUT ? `idle ${Math.round(idle / 1000)}s` : `max time ${elapsed}s`;
-      console.log(`[agent-route] Stale session cleared for ${params.id} (${reason})`);
+      console.log(`[agent-route] Max session time reached for ${params.id} (${elapsed}s)`);
       return NextResponse.json({ active: false });
     }
     return NextResponse.json({ active: true, elapsed });
@@ -411,11 +410,9 @@ export async function POST(
   // Check if captain is already running for this project
   const existingSession = activeProjects.get(projectId);
   if (existingSession) {
-    const idle = Date.now() - existingSession.lastActivity;
     const totalElapsed = Date.now() - existingSession.startedAt;
-    // Only block if session is genuinely active (has recent activity and not timed out)
-    if (idle < STALE_TIMEOUT && totalElapsed < MAX_SESSION_TIME) {
-      // Save user message to DB so captain sees it next time, but don't start new session
+    if (totalElapsed < MAX_SESSION_TIME) {
+      // Captain is still within max time — save message, don't start duplicate
       const userEmail2 = session?.user?.email;
       const userActor2 = userEmail2 ? await prisma.actor.findFirst({
         where: { email: userEmail2, type: 'HUMAN' }, select: { id: true },
@@ -428,9 +425,9 @@ export async function POST(
         error: `Captain is currently working (${Math.round(totalElapsed / 1000)}s). Your message has been saved and will be seen in the next session.`,
       }, { status: 409 });
     }
-    // Session is stale — clear it and proceed
+    // Max time exceeded — clear and start fresh
     activeProjects.delete(projectId);
-    console.log(`[agent-route] Stale session cleared before new POST for ${projectId} (idle ${Math.round(idle / 1000)}s)`);
+    console.log(`[agent-route] Max session time exceeded, clearing for ${projectId} (${Math.round(totalElapsed / 1000)}s)`);
   }
 
   // Find user's actor ID (by email match)
