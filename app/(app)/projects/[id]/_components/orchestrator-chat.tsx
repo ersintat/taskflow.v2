@@ -609,11 +609,11 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
             type="button"
             onClick={toggleModel}
             disabled={isLoading}
-            className={`h-10 px-2.5 rounded-md text-[11px] font-mono font-semibold shrink-0 border transition-colors ${
-              captainModel === 'opus'
-                ? 'bg-orange-950/50 text-orange-400 border-orange-500/30 hover:bg-orange-950/70'
-                : 'bg-rose-950/50 text-rose-300 border-rose-800/40 hover:bg-rose-950/70'
-            }`}
+            className="h-10 px-2.5 rounded-md text-[11px] font-mono font-semibold shrink-0 border text-white transition-opacity hover:opacity-80"
+            style={{
+              backgroundColor: captainModel === 'opus' ? '#d6662a' : '#901c14',
+              borderColor: captainModel === 'opus' ? '#d6662a' : '#901c14',
+            }}
             title={`Model: ${captainModel === 'opus' ? 'Opus 4.6 (max)' : 'Sonnet 4.6 (fast)'}. Click to switch.`}
           >
             {captainModel === 'opus' ? 'Opus' : 'Sonnet'}
