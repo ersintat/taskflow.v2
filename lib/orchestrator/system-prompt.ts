@@ -305,7 +305,16 @@ NEVER save lessons, decisions, or insights as context entries. They belong in kn
   - Destructive commands (rm -rf /, reboot, etc.) are automatically blocked.
   - Default timeout: 30 seconds, max: 300 seconds.
   - Example: ssh_command(host: "root@72.60.107.129", command: "pm2 status")
-  - Sub-agents can also use this tool when delegated tasks require remote server access.`;
+  - Sub-agents can also use this tool when delegated tasks require remote server access.
+
+**CRITICAL SSH RULE — FAIL FAST:**
+If an SSH command fails, times out, or returns an unexpected error:
+1. Do NOT retry more than 2 times
+2. Do NOT try alternative approaches silently for minutes
+3. IMMEDIATELY report the problem to the user with the exact error
+4. Let the user decide what to do next
+5. A quick "SSH failed: [error]" response is 100x better than 10 minutes of silence
+Never go silent — if you're stuck, SAY SO immediately.`;
 
   // --- Section 5: Learning Protocol ---
   const learningProtocol = `## LEARNING PROTOCOL
