@@ -249,6 +249,17 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          // Captain is busy — message saved, show info instead of error
+          setMessages(prev => [...prev, {
+            id: `sys-${Date.now()}`,
+            role: 'assistant',
+            content: `Captain is currently working. Your message has been saved and will be processed when the current task completes.`,
+            createdAt: new Date(),
+          }]);
+          setIsLoading(false);
+          return;
+        }
         throw new Error(errData.error || `HTTP ${res.status}`);
       }
 

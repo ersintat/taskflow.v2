@@ -19,7 +19,10 @@ function getMcpServerPath(): string {
 let lastRateLimitInfo: { utilization?: number; resetsAt?: number; rateLimitType?: string; status?: string } | null = null;
 
 // Track which projects have an active captain session
-const activeProjects = new Map<string, { startedAt: number }>();
+// lastActivity updates on every event — used for stale detection (no events for 2 min = stale)
+const activeProjects = new Map<string, { startedAt: number; lastActivity: number }>();
+const STALE_TIMEOUT = 120_000; // 2 minutes of no activity = stale
+const MAX_SESSION_TIME = 30 * 60_000; // 30 minutes absolute max
 
 // ─── Background Agent Runner ───
 // Runs Agent SDK query() independently of browser connection.
@@ -56,6 +59,10 @@ async function runAgentInBackground(
   const bufferedEvents: AgentEvent[] = [];
 
   const emit = (event: AgentEvent) => {
+    // Update last activity timestamp on every event
+    const session = activeProjects.get(projectId);
+    if (session) session.lastActivity = Date.now();
+
     if (listeners.size > 0) {
       for (const listener of listeners) {
         try { listener(event); } catch { /* listener error — ignore */ }
@@ -74,7 +81,8 @@ async function runAgentInBackground(
   let captainActorId: string | null = null;
 
   // Fire-and-forget: agent runs regardless of subscribers
-  activeProjects.set(projectId, { startedAt: Date.now() });
+  const now = Date.now();
+  activeProjects.set(projectId, { startedAt: now, lastActivity: now });
   (async () => {
     const workspacePath = path.join(process.cwd(), 'workspaces', projectId);
     if (!fs.existsSync(workspacePath)) {
@@ -346,11 +354,15 @@ export async function GET(
 ) {
   const active = activeProjects.get(params.id);
   if (active) {
-    const elapsed = Math.round((Date.now() - active.startedAt) / 1000);
-    // Auto-clear stale sessions (>10 minutes)
-    if (elapsed > 600) {
+    const now = Date.now();
+    const elapsed = Math.round((now - active.startedAt) / 1000);
+    const idle = now - active.lastActivity;
+
+    // Stale: no events for 2 min OR absolute max 30 min
+    if (idle > STALE_TIMEOUT || (now - active.startedAt) > MAX_SESSION_TIME) {
       activeProjects.delete(params.id);
-      console.log(`[agent-route] Stale session cleared for ${params.id} (${elapsed}s)`);
+      const reason = idle > STALE_TIMEOUT ? `idle ${Math.round(idle / 1000)}s` : `max time ${elapsed}s`;
+      console.log(`[agent-route] Stale session cleared for ${params.id} (${reason})`);
       return NextResponse.json({ active: false });
     }
     return NextResponse.json({ active: true, elapsed });
@@ -381,6 +393,31 @@ export async function POST(
   }
 
   const projectId = params.id;
+
+  // Check if captain is already running for this project
+  const existingSession = activeProjects.get(projectId);
+  if (existingSession) {
+    const idle = Date.now() - existingSession.lastActivity;
+    const totalElapsed = Date.now() - existingSession.startedAt;
+    // Only block if session is genuinely active (has recent activity and not timed out)
+    if (idle < STALE_TIMEOUT && totalElapsed < MAX_SESSION_TIME) {
+      // Save user message to DB so captain sees it next time, but don't start new session
+      const userEmail2 = session?.user?.email;
+      const userActor2 = userEmail2 ? await prisma.actor.findFirst({
+        where: { email: userEmail2, type: 'HUMAN' }, select: { id: true },
+      }).catch(() => null) : null;
+      await prisma.orchestratorChat.create({
+        data: { projectId, role: 'user', content: userMessage.trim(), actorId: userActor2?.id || null },
+      }).catch((e: any) => console.error('[agent-route]', e.message));
+
+      return NextResponse.json({
+        error: `Captain is currently working (${Math.round(totalElapsed / 1000)}s). Your message has been saved and will be seen in the next session.`,
+      }, { status: 409 });
+    }
+    // Session is stale — clear it and proceed
+    activeProjects.delete(projectId);
+    console.log(`[agent-route] Stale session cleared before new POST for ${projectId} (idle ${Math.round(idle / 1000)}s)`);
+  }
 
   // Find user's actor ID (by email match)
   const userEmail = session?.user?.email;
