@@ -178,7 +178,7 @@ async function runSubAgent(queueItemId: string): Promise<void> {
         env: { DATABASE_URL: dbUrl, PROJECT_ID: projectId },
       },
     },
-    allowedTools: ['mcp__taskflow-tools__*', 'Read', 'Glob', 'Grep'],
+    allowedTools: ['mcp__taskflow-tools__*', 'Read', 'Glob', 'Grep', 'WebFetch'],
     permissionMode: 'acceptEdits' as const,
   };
 

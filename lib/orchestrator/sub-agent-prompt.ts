@@ -113,7 +113,9 @@ This workspace has governance rules in the governance/ directory. Read them with
   const toolGuidance = `## TOOL USAGE
 
 You have access to these tools:
-- \`executeBash\`: Read files, list directories, run scripts in the workspace
+- \`Read\`, \`Glob\`, \`Grep\`: Read workspace files, search content, find files
+- \`WebFetch\`: Make HTTP requests to external APIs (GET/POST) — use for Meta API, GA4, GSC, Shopify, etc.
+- \`ssh_command\`: Execute commands on remote servers via SSH
 - \`add_comment\`: Report progress on your task (attributed to you)
 - \`update_task\`: Update task status or description
 - \`create_subtask\`: Break your work into tracked sub-items
@@ -122,6 +124,7 @@ You have access to these tools:
 - \`list_tasks\`: See other tasks for context
 - \`update_context\`: Save project state information
 
+You do NOT have Bash, Write, or Edit access. All data operations go through MCP tools.
 You do NOT have access to: create_task, create_sub_agent, enqueue_task, delete_task, approve_reject_task, assign_task, send_notification.`;
 
   const completionProtocol = `## COMPLETION PROTOCOL
