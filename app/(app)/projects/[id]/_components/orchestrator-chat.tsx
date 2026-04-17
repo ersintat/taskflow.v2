@@ -57,8 +57,8 @@ const ChatBubble = memo(function ChatBubble({ msg, formatTimestamp, userAvatarUr
         {actorInfo && actorInfo.type === 'AGENT' && (
           <span className="text-[10px] text-indigo-400 font-medium px-1">{actorInfo.name}</span>
         )}
-        <div className={`rounded-lg px-4 py-2 overflow-hidden ${msg.role === 'user' ? 'bg-zinc-800 text-slate-200' : 'bg-indigo-950/30 text-slate-300 border border-indigo-500/10'}`}>
-          <div className="chat-markdown text-[13px] overflow-x-auto" style={{ fontFamily: '"SF Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace' }}>
+        <div className={`rounded-lg px-4 py-2 overflow-hidden min-w-0 ${msg.role === 'user' ? 'bg-zinc-800 text-slate-200' : 'bg-indigo-950/30 text-slate-300 border border-indigo-500/10'}`}>
+          <div className="chat-markdown text-[13px]" style={{ fontFamily: '"SF Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace' }}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
           </div>
           {msg.toolCalls && msg.toolCalls.length > 0 && (
@@ -384,9 +384,9 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
               <div className="flex gap-3">
                 <ChatAvatar role="assistant" avatarUrl={captainAvatar} fallbackIcon="bot" />
                 <div className="flex flex-col gap-1 max-w-[80%] min-w-0 items-start">
-                  <div className="rounded-lg px-4 py-2 overflow-hidden bg-indigo-950/30 text-slate-300 border border-indigo-500/10">
+                  <div className="rounded-lg px-4 py-2 overflow-hidden min-w-0 bg-indigo-950/30 text-slate-300 border border-indigo-500/10">
                     {streamingContent && (
-                      <div className="chat-markdown text-[13px] overflow-x-auto" style={{ fontFamily: '"SF Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace' }}>
+                      <div className="chat-markdown text-[13px]" style={{ fontFamily: '"SF Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace' }}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingContent}</ReactMarkdown>
                       </div>
                     )}

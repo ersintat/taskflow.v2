@@ -153,9 +153,10 @@
 
 /* Chat markdown table styles */
 .chat-markdown {
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-wrap: break-word;
   word-break: break-word;
+  max-width: 100%;
 }
 .chat-markdown table {
   display: block;
@@ -176,6 +177,9 @@
 .chat-markdown td {
   border: 1px solid rgba(255,255,255,0.1);
   padding: 6px 12px;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-width: 250px;
 }
 .chat-markdown tr:hover td {
   background: rgba(255,255,255,0.03);
@@ -193,6 +197,8 @@
   overflow-x: auto;
   max-width: 100%;
   margin: 8px 0;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 .chat-markdown pre code {
   background: none;
