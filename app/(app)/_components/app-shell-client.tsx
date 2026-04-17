@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
@@ -87,13 +87,31 @@ export function AppShellClient({ children }: { children: React.ReactNode }) {
     .slice(0, 2);
 
   // --- Sidebar Projects + Unread Tracking ---
+  const prevUnreadTotal = useRef(-1); // -1 = initial load, don't play sound
+  const notifAudio = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    notifAudio.current = new Audio('/notification.mp3');
+    notifAudio.current.volume = 0.5;
+  }, []);
+
   const fetchSidebarProjects = useCallback(() => {
     try {
       const stored = localStorage.getItem('projectLastVisited');
       const lastVisited = stored ? JSON.parse(stored) : {};
       fetch(`/api/projects/sidebar?lastVisited=${encodeURIComponent(JSON.stringify(lastVisited))}`)
         .then((r) => r.json())
-        .then((d: any) => { if (d.projects) setSidebarProjects(d.projects); })
+        .then((d: any) => {
+          if (d.projects) {
+            const newTotal = d.projects.reduce((sum: number, p: any) => sum + p.unread, 0);
+            // Play sound when new unread messages arrive
+            if (newTotal > prevUnreadTotal.current && prevUnreadTotal.current > -1) {
+              notifAudio.current?.play().catch(() => {});
+            }
+            prevUnreadTotal.current = newTotal;
+            setSidebarProjects(d.projects);
+          }
+        })
         .catch((e) => console.error('[sidebar-projects]', e));
     } catch { /* localStorage error */ }
   }, []);
