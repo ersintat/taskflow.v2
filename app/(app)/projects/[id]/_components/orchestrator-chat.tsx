@@ -611,8 +611,8 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
             disabled={isLoading}
             className={`h-10 px-2.5 rounded-md text-[11px] font-mono font-semibold shrink-0 border transition-colors ${
               captainModel === 'opus'
-                ? 'bg-indigo-950/50 text-indigo-400 border-indigo-500/30 hover:bg-indigo-950/70'
-                : 'bg-emerald-950/50 text-emerald-400 border-emerald-500/30 hover:bg-emerald-950/70'
+                ? 'bg-orange-950/50 text-orange-400 border-orange-500/30 hover:bg-orange-950/70'
+                : 'bg-rose-950/50 text-rose-300 border-rose-800/40 hover:bg-rose-950/70'
             }`}
             title={`Model: ${captainModel === 'opus' ? 'Opus 4.6 (max)' : 'Sonnet 4.6 (fast)'}. Click to switch.`}
           >
