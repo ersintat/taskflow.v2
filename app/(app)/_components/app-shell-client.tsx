@@ -172,7 +172,7 @@ export function AppShellClient({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-[240px] flex flex-col bg-card border-r border-border transition-transform duration-normal lg:relative lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-[290px] flex flex-col bg-card border-r border-border transition-transform duration-normal lg:relative lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
