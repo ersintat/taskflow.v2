@@ -118,23 +118,25 @@ async function runAgentInBackground(
 
     let fullContent = '';
 
-    // Build prompt — multimodal if images attached, plain string otherwise
-    let prompt: any = textPrompt;
+    // If images attached, save to workspace and tell captain to read them
+    let prompt: string = textPrompt;
     if (images && images.length > 0) {
-      const contentBlocks: any[] = [];
-      for (const img of images) {
-        contentBlocks.push({
-          type: 'image',
-          source: { type: 'base64', data: img.base64, media_type: img.mediaType },
-        });
-      }
-      contentBlocks.push({ type: 'text', text: textPrompt });
+      const imageDir = path.join(workspacePath, 'user-images');
+      if (!fs.existsSync(imageDir)) fs.mkdirSync(imageDir, { recursive: true });
 
-      // Use async iterable for multimodal messages
-      async function* makeMessages() {
-        yield { message: { role: 'user' as const, content: contentBlocks } };
+      const imagePaths: string[] = [];
+      for (const img of images) {
+        const ext = img.mediaType.split('/')[1] === 'jpeg' ? 'jpg' : img.mediaType.split('/')[1];
+        const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
+        const filePath = path.join(imageDir, filename);
+        fs.writeFileSync(filePath, Buffer.from(img.base64, 'base64'));
+        imagePaths.push(filePath);
       }
-      prompt = makeMessages();
+
+      const imageNote = imagePaths.length === 1
+        ? `\n\n[The user attached an image. Read it with the Read tool: ${imagePaths[0]}]`
+        : `\n\n[The user attached ${imagePaths.length} images. Read them with the Read tool:\n${imagePaths.map(p => `- ${p}`).join('\n')}]`;
+      prompt = textPrompt + imageNote;
     }
 
     try {
