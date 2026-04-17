@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback, memo } from 'react';
-import { User, Send, Loader2, Sparkles, TerminalSquare, Trash2 } from 'lucide-react';
+import { User, Send, Loader2, Sparkles, TerminalSquare, Trash2, ImagePlus, Mic, MicOff, X } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import ReactMarkdown from 'react-markdown';
@@ -13,6 +13,7 @@ interface ChatMessage {
   content: string;
   actorId?: string | null;
   toolCalls?: { tool: string; args: any }[];
+  images?: string[]; // URLs of attached images
   createdAt?: Date;
 }
 
@@ -58,6 +59,15 @@ const ChatBubble = memo(function ChatBubble({ msg, formatTimestamp, userAvatarUr
           <span className="text-[10px] text-indigo-400 font-medium px-1">{actorInfo.name}</span>
         )}
         <div className={`rounded-lg px-4 py-2 overflow-hidden min-w-0 ${msg.role === 'user' ? 'bg-zinc-800 text-slate-200' : 'bg-indigo-950/30 text-slate-300 border border-indigo-500/10'}`}>
+          {msg.images && msg.images.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {msg.images.map((url, i) => (
+                <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                  <img src={url} alt="attachment" className="max-w-[200px] max-h-[150px] rounded-md border border-border/30 object-cover cursor-pointer hover:opacity-80 transition-opacity" />
+                </a>
+              ))}
+            </div>
+          )}
           <div className="chat-markdown text-[13px]" style={{ fontFamily: '"SF Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace' }}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
           </div>
@@ -94,6 +104,10 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
   const [actorMap, setActorMap] = useState<Record<string, { name: string; avatarUrl?: string; type: string }>>({});
   const [rateLimit, setRateLimit] = useState<{ utilization?: number; status?: string; resetsAt?: number; rateLimitType?: string } | null>(null);
   const [captainWorking, setCaptainWorking] = useState(false);
+  const [pendingImages, setPendingImages] = useState<{ url: string; base64: string; mediaType: string }[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession() || {};
   const userImage = (session?.user as any)?.image ?? null;
@@ -200,17 +214,24 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
   // Send message via SSE
   const handleSubmit = useCallback(async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && pendingImages.length === 0) || isLoading) return;
+
+    // Clean up interim speech markers
+    const cleanInput = input.replace(/\u200B.*$/, '').trim();
 
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
       role: 'user',
-      content: input.trim(),
+      content: cleanInput || (pendingImages.length > 0 ? '[Image attached]' : ''),
+      images: pendingImages.length > 0 ? pendingImages.map(img => img.url) : undefined,
       createdAt: new Date(),
     };
 
+    const imagesToSend = pendingImages.map(img => ({ base64: img.base64, mediaType: img.mediaType }));
+
     setMessages(prev => [...prev, userMsg]);
     setInput('');
+    setPendingImages([]);
     setIsLoading(true);
     setStreamingContent('');
     setStreamingTools([]);
@@ -220,7 +241,10 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
       const res = await fetch(`/api/projects/${projectId}/agent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg.content }),
+        body: JSON.stringify({
+          message: userMsg.content,
+          images: imagesToSend.length > 0 ? imagesToSend : undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -300,7 +324,66 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
       setStreamingContent('');
       setStreamingTools([]);
     }
-  }, [input, isLoading, projectId]);
+  }, [input, isLoading, projectId, pendingImages]);
+
+  // --- Image Upload ---
+  const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) continue;
+      if (file.size > 10 * 1024 * 1024) { alert('Max 10MB per image'); continue; }
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.url) {
+          setPendingImages(prev => [...prev, { url: data.url, base64: data.base64, mediaType: data.mediaType }]);
+        }
+      } catch (err) { console.error('[upload]', err); }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, []);
+
+  const removePendingImage = useCallback((index: number) => {
+    setPendingImages(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // --- Speech-to-Text ---
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+      return;
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) { alert('Speech recognition not supported in this browser'); return; }
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'tr-TR';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    let finalTranscript = '';
+    recognition.onresult = (event: any) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript + ' ';
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      setInput(prev => {
+        const base = prev.replace(/\u200B.*$/, ''); // remove previous interim
+        return finalTranscript + (interim ? '\u200B' + interim : '');
+      });
+    };
+    recognition.onerror = () => setIsRecording(false);
+    recognition.onend = () => setIsRecording(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
+  }, [isRecording]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -432,20 +515,73 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
         <div ref={bottomRef} />
       </div>
 
-      <form onSubmit={handleSubmit} className="mt-4 flex gap-2 items-end">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Send a message to Captain..."
-          disabled={isLoading}
-          rows={Math.min(Math.max(input.split('\n').length, 1), 5)}
-          className="flex-1 bg-card border border-input rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring custom-scrollbar"
-          style={{ minHeight: '40px' }}
-        />
-        <Button type="submit" disabled={isLoading || !input.trim()} className="h-10 shrink-0">
-          <Send className="h-4 w-4" />
-        </Button>
+      <form onSubmit={handleSubmit} className="mt-4 space-y-2">
+        {/* Image preview */}
+        {pendingImages.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-1">
+            {pendingImages.map((img, i) => (
+              <div key={i} className="relative group">
+                <img src={img.url} alt="pending" className="h-16 w-16 rounded-md object-cover border border-border/50" />
+                <button
+                  type="button"
+                  onClick={() => removePendingImage(i)}
+                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2 items-end">
+          {/* Image upload */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleImageSelect}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            className="h-10 w-10 shrink-0"
+            title="Attach image"
+          >
+            <ImagePlus className="h-4 w-4" />
+          </Button>
+
+          {/* Mic */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={toggleRecording}
+            disabled={isLoading}
+            className={`h-10 w-10 shrink-0 ${isRecording ? 'text-red-500 animate-pulse' : ''}`}
+            title={isRecording ? 'Stop recording' : 'Voice input'}
+          >
+            {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </Button>
+
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Send a message to Captain..."
+            disabled={isLoading}
+            rows={Math.min(Math.max(input.split('\n').length, 1), 5)}
+            className="flex-1 bg-card border border-input rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring custom-scrollbar"
+            style={{ minHeight: '40px' }}
+          />
+          <Button type="submit" disabled={isLoading || (!input.trim() && pendingImages.length === 0)} className="h-10 shrink-0">
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
       </form>
 
       {/* Rate Limit Bar */}

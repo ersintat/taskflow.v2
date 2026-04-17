@@ -41,9 +41,15 @@ interface AgentEvent {
 
 type EventListener = (event: AgentEvent) => void;
 
+interface ImageAttachment {
+  base64: string;
+  mediaType: string;
+}
+
 async function runAgentInBackground(
   projectId: string,
   userMessage: string,
+  images?: ImageAttachment[],
 ): Promise<{ subscribe: (listener: EventListener) => () => void }> {
   const listeners = new Set<EventListener>();
   let isComplete = false;
@@ -103,7 +109,7 @@ async function runAgentInBackground(
       .map((m: any) => `${m.role === 'user' ? 'Human' : 'Assistant'}: ${m.content}`)
       .join('\n\n');
 
-    const fullPrompt = chatHistory
+    const textPrompt = chatHistory
       ? `Previous conversation:\n${chatHistory}\n\nHuman: ${userMessage}`
       : userMessage;
 
@@ -112,9 +118,28 @@ async function runAgentInBackground(
 
     let fullContent = '';
 
+    // Build prompt — multimodal if images attached, plain string otherwise
+    let prompt: any = textPrompt;
+    if (images && images.length > 0) {
+      const contentBlocks: any[] = [];
+      for (const img of images) {
+        contentBlocks.push({
+          type: 'image',
+          source: { type: 'base64', data: img.base64, media_type: img.mediaType },
+        });
+      }
+      contentBlocks.push({ type: 'text', text: textPrompt });
+
+      // Use async iterable for multimodal messages
+      async function* makeMessages() {
+        yield { message: { role: 'user' as const, content: contentBlocks } };
+      }
+      prompt = makeMessages();
+    }
+
     try {
       const agentStream = query({
-        prompt: fullPrompt,
+        prompt,
         options: {
           agent: 'captain',
           agents: {
@@ -340,7 +365,7 @@ export async function POST(
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();
-  const { message } = body;
+  const { message, images: rawImages } = body;
 
   // Support both useChat format (messages array) and direct message format
   let userMessage = message;
@@ -372,8 +397,13 @@ export async function POST(
     data: { projectId, role: 'user', content: userMessage.trim(), actorId: userActorId },
   }).catch((e: any) => console.error('[agent-route]', e.message));
 
+  // Parse image attachments
+  const imageAttachments: ImageAttachment[] = (rawImages || [])
+    .filter((img: any) => img.base64 && img.mediaType)
+    .map((img: any) => ({ base64: img.base64, mediaType: img.mediaType }));
+
   // Start agent in background (runs independently of this SSE stream)
-  const { subscribe } = await runAgentInBackground(projectId, userMessage.trim());
+  const { subscribe } = await runAgentInBackground(projectId, userMessage.trim(), imageAttachments.length > 0 ? imageAttachments : undefined);
 
   // SSE stream: pipes events to browser while connection is open
   const encoder = new TextEncoder();

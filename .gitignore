@@ -41,3 +41,4 @@ yarn-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 _backup_claude_cli/
+uploads/
