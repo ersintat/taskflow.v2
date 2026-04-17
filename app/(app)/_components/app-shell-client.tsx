@@ -138,15 +138,28 @@ export function AppShellClient({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [fetchSidebarProjects]);
 
+  const prevNotifCount = useRef(-1);
+  const bellAudio = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    bellAudio.current = new Audio('/bell.mp3');
+    bellAudio.current.volume = 0.5;
+  }, []);
+
   const fetchNotifications = useCallback(() => {
     fetch('/api/notifications?limit=20')
       .then((r) => r.json())
       .then((d: any) => {
         setNotifications(d.notifications ?? []);
-        setUnreadCount(d.unreadCount ?? 0);
+        const newCount = d.unreadCount ?? 0;
+        if (newCount > unreadCount && prevNotifCount.current > -1) {
+          bellAudio.current?.play().catch(() => {});
+        }
+        prevNotifCount.current = newCount;
+        setUnreadCount(newCount);
       })
       .catch((e) => console.error('[app_shell_client]', e));
-  }, []);
+  }, [unreadCount]);
 
   useEffect(() => {
     fetchNotifications();
