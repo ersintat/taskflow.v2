@@ -105,6 +105,12 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
   const [rateLimit, setRateLimit] = useState<{ utilization?: number; status?: string; resetsAt?: number; rateLimitType?: string } | null>(null);
   const [captainWorking, setCaptainWorking] = useState(false);
   const [pendingImages, setPendingImages] = useState<{ url: string; base64: string; mediaType: string }[]>([]);
+  const [captainModel, setCaptainModel] = useState<'opus' | 'sonnet'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('captainModel') as 'opus' | 'sonnet') || 'opus';
+    }
+    return 'opus';
+  });
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -244,6 +250,7 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
         body: JSON.stringify({
           message: userMsg.content,
           images: imagesToSend.length > 0 ? imagesToSend : undefined,
+          model: captainModel,
         }),
       });
 
@@ -335,7 +342,16 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
       setStreamingContent('');
       setStreamingTools([]);
     }
-  }, [input, isLoading, projectId, pendingImages]);
+  }, [input, isLoading, projectId, pendingImages, captainModel]);
+
+  // --- Model Selection ---
+  const toggleModel = useCallback(() => {
+    setCaptainModel(prev => {
+      const next = prev === 'opus' ? 'sonnet' : 'opus';
+      localStorage.setItem('captainModel', next);
+      return next;
+    });
+  }, []);
 
   // --- Image Upload ---
   const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -589,6 +605,19 @@ export function OrchestratorChat({ projectId }: { projectId: string }) {
             className="flex-1 bg-card border border-input rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring custom-scrollbar"
             style={{ minHeight: '40px' }}
           />
+          <button
+            type="button"
+            onClick={toggleModel}
+            disabled={isLoading}
+            className={`h-10 px-2.5 rounded-md text-[11px] font-mono font-semibold shrink-0 border transition-colors ${
+              captainModel === 'opus'
+                ? 'bg-indigo-950/50 text-indigo-400 border-indigo-500/30 hover:bg-indigo-950/70'
+                : 'bg-emerald-950/50 text-emerald-400 border-emerald-500/30 hover:bg-emerald-950/70'
+            }`}
+            title={`Model: ${captainModel === 'opus' ? 'Opus 4.6 (max)' : 'Sonnet 4.6 (fast)'}. Click to switch.`}
+          >
+            {captainModel === 'opus' ? 'Opus' : 'Sonnet'}
+          </button>
           <Button type="submit" disabled={isLoading || (!input.trim() && pendingImages.length === 0)} className="h-10 shrink-0">
             <Send className="h-4 w-4" />
           </Button>

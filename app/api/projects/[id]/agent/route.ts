@@ -54,6 +54,7 @@ async function runAgentInBackground(
   projectId: string,
   userMessage: string,
   images?: ImageAttachment[],
+  modelChoice: string = 'opus',
 ): Promise<{ subscribe: (listener: EventListener) => () => void }> {
   const listeners = new Set<EventListener>();
   let isComplete = false;
@@ -149,7 +150,7 @@ async function runAgentInBackground(
     }
 
     try {
-      console.log(`[agent-route] Starting query() for ${projectId} — prompt length: ${typeof prompt === 'string' ? prompt.length : 'iterable'}`);
+      console.log(`[agent-route] Starting query() for ${projectId} — model: ${modelChoice}, prompt length: ${typeof prompt === 'string' ? prompt.length : 'iterable'}`);
 
       const agentStream = query({
         prompt,
@@ -159,8 +160,8 @@ async function runAgentInBackground(
             captain: {
               description: 'Orchestrator Captain — PSNS Taskflow',
               prompt: systemPrompt,
-              model: 'opus',
-              effort: 'max',
+              model: modelChoice,
+              effort: modelChoice === 'opus' ? 'max' : 'high',
             },
           },
           mcpServers: {
@@ -392,7 +393,7 @@ export async function POST(
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();
-  const { message, images: rawImages } = body;
+  const { message, images: rawImages, model: requestedModel } = body;
 
   // Support both useChat format (messages array) and direct message format
   let userMessage = message;
@@ -453,7 +454,8 @@ export async function POST(
     .map((img: any) => ({ base64: img.base64, mediaType: img.mediaType }));
 
   // Start agent in background (runs independently of this SSE stream)
-  const { subscribe } = await runAgentInBackground(projectId, userMessage.trim(), imageAttachments.length > 0 ? imageAttachments : undefined);
+  const captainModelChoice = requestedModel === 'sonnet' ? 'sonnet' : 'opus';
+  const { subscribe } = await runAgentInBackground(projectId, userMessage.trim(), imageAttachments.length > 0 ? imageAttachments : undefined, captainModelChoice);
 
   // SSE stream: pipes events to browser while connection is open
   const encoder = new TextEncoder();
