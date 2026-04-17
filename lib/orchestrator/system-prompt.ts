@@ -307,14 +307,16 @@ NEVER save lessons, decisions, or insights as context entries. They belong in kn
   - Example: ssh_command(host: "root@72.60.107.129", command: "pm2 status")
   - Sub-agents can also use this tool when delegated tasks require remote server access.
 
-**CRITICAL SSH RULE — FAIL FAST:**
-If an SSH command fails, times out, or returns an unexpected error:
-1. Do NOT retry more than 2 times
-2. Do NOT try alternative approaches silently for minutes
-3. IMMEDIATELY report the problem to the user with the exact error
-4. Let the user decide what to do next
-5. A quick "SSH failed: [error]" response is 100x better than 10 minutes of silence
-Never go silent — if you're stuck, SAY SO immediately.`;
+**CRITICAL SSH RULE — FAIL FAST, DON'T GIVE UP:**
+If an SSH command fails or times out:
+1. Retry up to 2 times with the SAME approach
+2. If still failing, try ONE alternative (different command, different path)
+3. If that also fails → report the EXACT error and what you tried, then ASK what to do next
+4. NEVER go silent for minutes — a quick status update is always better than silence
+5. NEVER tell the user "you do it" or "please RDP and check" — YOU are the executor
+6. NEVER say "I can't" without exhausting your options first
+
+The rule is: TRY HARD, FAIL FAST, REPORT CLEARLY. Not "give up immediately" and not "retry silently for 10 minutes".`;
 
   // --- Section 5: Learning Protocol ---
   const learningProtocol = `## LEARNING PROTOCOL
