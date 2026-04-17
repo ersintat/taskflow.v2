@@ -27,7 +27,23 @@ export async function POST(req: NextRequest) {
     data: { projectId, role: 'user', content: message, actorId: agentActorId || null },
   });
 
-  // Run captain in background (fire-and-forget)
+  // Check if captain is already running for this project (via agent route's activeProjects)
+  // If captain is active, the [AUTO] message is already saved — captain will see it in chat history.
+  // Don't start a separate review session to avoid concurrent captains and chronology issues.
+  try {
+    const baseUrl = process.env.NEXTAUTH_URL || process.env.BASE_URL || 'http://localhost:3000';
+    const statusRes = await fetch(`${baseUrl}/api/projects/${projectId}/agent`);
+    const statusData = await statusRes.json();
+    if (statusData.active) {
+      console.log(`[trigger-captain] Captain already active for ${projectId} (${statusData.elapsed}s) — skipping review, message saved to chat`);
+      return NextResponse.json({ success: true, message: 'Captain already active — message queued in chat history' });
+    }
+  } catch (e: any) {
+    console.error('[trigger-captain] Status check failed:', e.message);
+    // Continue with review if status check fails
+  }
+
+  // Run captain in background (fire-and-forget) — only when captain is NOT already active
   runCaptainReview(projectId, message).catch((err) => {
     console.error('[trigger-captain] Fatal:', err.message);
   });
