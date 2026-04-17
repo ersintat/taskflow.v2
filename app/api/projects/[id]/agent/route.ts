@@ -21,8 +21,8 @@ let lastRateLimitInfo: { utilization?: number; resetsAt?: number; rateLimitType?
 // Track which projects have an active captain session
 // lastActivity updates on every event — used for stale detection (no events for 2 min = stale)
 const activeProjects = new Map<string, { startedAt: number; lastActivity: number }>();
-const STALE_TIMEOUT = 120_000; // 2 minutes of no activity = stale
-const MAX_SESSION_TIME = 30 * 60_000; // 30 minutes absolute max
+const STALE_TIMEOUT = 10 * 60_000; // 10 minutes of no activity = stale (SSH/tool calls can take minutes)
+const MAX_SESSION_TIME = 45 * 60_000; // 45 minutes absolute max
 
 // ─── Background Agent Runner ───
 // Runs Agent SDK query() independently of browser connection.
@@ -183,6 +183,10 @@ async function runAgentInBackground(
 
       for await (const event of agentStream) {
         eventCount++;
+        // Update lastActivity on EVERY event from SDK — prevents stale timeout during long tool calls
+        const activeSession = activeProjects.get(projectId);
+        if (activeSession) activeSession.lastActivity = Date.now();
+
         if (eventCount <= 3 || eventCount % 10 === 0) {
           console.log(`[agent-route] Event #${eventCount} type=${event.type} project=${projectId}`);
         }
