@@ -125,5 +125,27 @@ app.prepare().then(() => {
     console.log(`> Ready on http://${hostname}:${port}`);
     console.log('> WebSocket server is running for Terminal interface');
     initScheduler();
+
+    // Cleanup uploaded images older than 24 hours — runs every hour
+    const cleanupUploads = () => {
+      try {
+        const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+        if (!fs.existsSync(uploadsDir)) return;
+        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+        const files = fs.readdirSync(uploadsDir);
+        let deleted = 0;
+        for (const file of files) {
+          const filePath = path.join(uploadsDir, file);
+          const stat = fs.statSync(filePath);
+          if (stat.mtimeMs < cutoff) {
+            fs.unlinkSync(filePath);
+            deleted++;
+          }
+        }
+        if (deleted > 0) console.log(`[uploads-cleanup] Deleted ${deleted} files older than 24h`);
+      } catch (e: any) { console.error('[uploads-cleanup]', e.message); }
+    };
+    cleanupUploads(); // run on startup
+    setInterval(cleanupUploads, 60 * 60 * 1000); // then every hour
   });
 });
