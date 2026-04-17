@@ -94,7 +94,7 @@ async function runCaptainReview(projectId: string, triggerMessage: string): Prom
           },
         },
         allowedTools: ['mcp__taskflow-tools__*', 'Read', 'Glob', 'Grep'],
-        maxTurns: 10,
+        maxTurns: 20,
         permissionMode: 'acceptEdits',
       },
     });
