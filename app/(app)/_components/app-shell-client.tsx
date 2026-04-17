@@ -12,6 +12,7 @@ import {
   X,
   LogOut,
   ChevronDown,
+  ChevronRight,
   Workflow,
   Layers,
   Settings,
@@ -24,6 +25,8 @@ import {
   CheckCircle2,
   XCircle,
   ScrollText,
+  Plus,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -57,11 +60,20 @@ const NOTIF_COLORS: Record<string, string> = {
   error: 'text-red-500',
 };
 
+interface SidebarProject {
+  id: string;
+  name: string;
+  color: string;
+  unread: number;
+}
+
 export function AppShellClient({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [projectsExpanded, setProjectsExpanded] = useState(true);
+  const [sidebarProjects, setSidebarProjects] = useState<SidebarProject[]>([]);
   const pathname = usePathname();
   const router = useRouter();
   const { data: session } = useSession() || {};
@@ -73,6 +85,40 @@ export function AppShellClient({ children }: { children: React.ReactNode }) {
     .join('')
     .toUpperCase()
     .slice(0, 2);
+
+  // --- Sidebar Projects + Unread Tracking ---
+  const fetchSidebarProjects = useCallback(() => {
+    try {
+      const stored = localStorage.getItem('projectLastVisited');
+      const lastVisited = stored ? JSON.parse(stored) : {};
+      fetch(`/api/projects/sidebar?lastVisited=${encodeURIComponent(JSON.stringify(lastVisited))}`)
+        .then((r) => r.json())
+        .then((d: any) => { if (d.projects) setSidebarProjects(d.projects); })
+        .catch((e) => console.error('[sidebar-projects]', e));
+    } catch { /* localStorage error */ }
+  }, []);
+
+  // Track last visited project
+  useEffect(() => {
+    const match = pathname?.match(/^\/projects\/([a-z0-9]+)/i);
+    if (match) {
+      const projectId = match[1];
+      try {
+        const stored = localStorage.getItem('projectLastVisited');
+        const lastVisited = stored ? JSON.parse(stored) : {};
+        lastVisited[projectId] = new Date().toISOString();
+        localStorage.setItem('projectLastVisited', JSON.stringify(lastVisited));
+        // Clear unread for this project immediately in UI
+        setSidebarProjects((prev) => prev.map((p) => p.id === projectId ? { ...p, unread: 0 } : p));
+      } catch { /* localStorage error */ }
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    fetchSidebarProjects();
+    const interval = setInterval(fetchSidebarProjects, 30000);
+    return () => clearInterval(interval);
+  }, [fetchSidebarProjects]);
 
   const fetchNotifications = useCallback(() => {
     fetch('/api/notifications?limit=20')
@@ -147,6 +193,73 @@ export function AppShellClient({ children }: { children: React.ReactNode }) {
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
           {NAV_ITEMS.map((item: any) => {
+            // Projects gets special treatment — collapsible sub-menu
+            if (item.href === '/projects') {
+              const isProjectsActive = pathname?.startsWith('/projects');
+              const totalUnread = sidebarProjects.reduce((sum, p) => sum + p.unread, 0);
+              return (
+                <div key={item.href}>
+                  <div className="flex items-center">
+                    <button
+                      onClick={() => setProjectsExpanded(!projectsExpanded)}
+                      className="flex items-center justify-center h-8 w-6 shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', projectsExpanded && 'rotate-90')} />
+                    </button>
+                    <Link
+                      href="/projects"
+                      onClick={() => setSidebarOpen(false)}
+                      className={cn(
+                        'flex items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors flex-1',
+                        isProjectsActive
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      )}
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      {item.label}
+                      {totalUnread > 0 && (
+                        <span className="ml-auto h-5 min-w-[20px] rounded-full bg-primary text-[10px] font-bold text-primary-foreground flex items-center justify-center px-1.5">
+                          {totalUnread > 99 ? '99+' : totalUnread}
+                        </span>
+                      )}
+                    </Link>
+                  </div>
+                  {projectsExpanded && (
+                    <div className="ml-6 mt-0.5 space-y-0.5">
+                      {sidebarProjects.map((project) => {
+                        const isThisProject = pathname === `/projects/${project.id}`;
+                        return (
+                          <Link
+                            key={project.id}
+                            href={`/projects/${project.id}`}
+                            onClick={() => setSidebarOpen(false)}
+                            className={cn(
+                              'flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors',
+                              isThisProject
+                                ? 'bg-primary/10 text-primary font-medium'
+                                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                            )}
+                          >
+                            <span
+                              className="h-2.5 w-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: project.color || '#6366f1' }}
+                            />
+                            <span className="truncate flex-1">{project.name}</span>
+                            {project.unread > 0 && (
+                              <span className="h-4.5 min-w-[18px] rounded-full bg-primary/90 text-[9px] font-bold text-primary-foreground flex items-center justify-center px-1">
+                                {project.unread > 99 ? '99+' : project.unread}
+                              </span>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             const isActive =
               item.href === '/'
                 ? pathname === '/'
