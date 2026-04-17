@@ -148,6 +148,8 @@ async function runAgentInBackground(
     }
 
     try {
+      console.log(`[agent-route] Starting query() for ${projectId} — prompt length: ${typeof prompt === 'string' ? prompt.length : 'iterable'}`);
+
       const agentStream = query({
         prompt,
         options: {
@@ -176,7 +178,14 @@ async function runAgentInBackground(
         },
       });
 
+      console.log(`[agent-route] Entering stream loop for ${projectId}`);
+      let eventCount = 0;
+
       for await (const event of agentStream) {
+        eventCount++;
+        if (eventCount <= 3 || eventCount % 10 === 0) {
+          console.log(`[agent-route] Event #${eventCount} type=${event.type} project=${projectId}`);
+        }
         if (event.type === 'assistant') {
           // Add paragraph break between assistant turns (after tool calls)
           if (fullContent.length > 0 && !fullContent.endsWith('\n\n')) {
@@ -251,8 +260,9 @@ async function runAgentInBackground(
           }
         }
       }
+      console.log(`[agent-route] Stream loop ended for ${projectId} — ${eventCount} events, content=${fullContent.length} chars`);
     } catch (error: any) {
-      console.error('Agent SDK error:', error);
+      console.error(`[agent-route] Agent SDK error for ${projectId}:`, error.message, error.stack?.substring(0, 300));
       const msg = error.message || 'Unknown error';
 
       // Detect rate limit / overload
