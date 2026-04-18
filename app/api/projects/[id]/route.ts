@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import fs from 'fs';
+import path from 'path';
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -60,6 +62,17 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     // Cascade deletes handle: categories, tasks, knowledge, contexts, missions,
     // chat, systemLogs, tokenUsage, schedules (defined in schema.prisma)
     await prisma.project.delete({ where: { id: params.id } });
+
+    // Delete workspace directory (contains user-uploaded images, governance docs, etc.)
+    const workspacePath = path.join(process.cwd(), 'workspaces', params.id);
+    try {
+      if (fs.existsSync(workspacePath)) {
+        fs.rmSync(workspacePath, { recursive: true, force: true });
+        console.log(`[project-delete] Workspace deleted: ${workspacePath}`);
+      }
+    } catch (e: any) {
+      console.error(`[project-delete] Failed to delete workspace ${workspacePath}:`, e.message);
+    }
 
     console.log(`[project-delete] Deleted project "${project.name}" (${params.id}) by user ${session.user.email}`);
     return NextResponse.json({ success: true, message: `Project "${project.name}" deleted` });
