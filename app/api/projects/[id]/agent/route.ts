@@ -116,11 +116,15 @@ async function runAgentInBackground(
     const chatHistory = recentChat
       .reverse()
       .filter((m: any) => m.role === 'user' || m.role === 'assistant')
-      .map((m: any) => `${m.role === 'user' ? 'Human' : 'Assistant'}: ${m.content}`)
-      .join('\n\n');
+      .slice(0, -1) // exclude the current user message (already in DB, passed separately)
+      .map((m: any) => {
+        const role = m.role === 'user' ? 'user' : 'assistant';
+        return `<message role="${role}">\n${m.content}\n</message>`;
+      })
+      .join('\n');
 
     const textPrompt = chatHistory
-      ? `Previous conversation:\n${chatHistory}\n\nHuman: ${userMessage}`
+      ? `<conversation_history>\n${chatHistory}\n</conversation_history>\n\nThe user just sent you this new message. Respond to it directly — do NOT continue the XML format or fabricate additional turns:\n\n${userMessage}`
       : userMessage;
 
     const dbUrl = process.env.DATABASE_URL || 'file:./dev.db';

@@ -72,11 +72,15 @@ async function runCaptainReview(projectId: string, triggerMessage: string): Prom
   const chatHistory = recentChat
     .reverse()
     .filter((m: any) => m.role === 'user' || m.role === 'assistant')
-    .map((m: any) => `${m.role === 'user' ? 'Human' : 'Assistant'}: ${m.content}`)
-    .join('\n\n');
+    .slice(0, -1) // exclude the current trigger message
+    .map((m: any) => {
+      const role = m.role === 'user' ? 'user' : 'assistant';
+      return `<message role="${role}">\n${m.content}\n</message>`;
+    })
+    .join('\n');
 
   const fullPrompt = chatHistory
-    ? `Previous conversation:\n${chatHistory}\n\nHuman: ${triggerMessage}`
+    ? `<conversation_history>\n${chatHistory}\n</conversation_history>\n\nNew auto-trigger message. Respond directly — do NOT continue the XML format:\n\n${triggerMessage}`
     : triggerMessage;
 
   const dbUrl = process.env.DATABASE_URL || 'file:./dev.db';
